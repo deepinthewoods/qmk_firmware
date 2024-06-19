@@ -16,8 +16,29 @@
 
 #pragma once
 
-#define WS2812_PWM_DRIVER PWMD4
-#define WS2812_PWM_CHANNEL 4
-#define WS2812_PWM_PAL_MODE 2
-#define WS2812_PWM_DMA_STREAM STM32_DMA1_STREAM7
-#define WS2812_PWM_DMA_CHANNEL 7
+// #define WS2812_PWM_DRIVER PWMD4
+// #define WS2812_PWM_CHANNEL 4
+// #define WS2812_PWM_PAL_MODE 2
+
+#define WS2812_DRIVER PIO_WS2812_NUM0 // Assuming you're using PIO instance 0
+#define WS2812_PIN 28                // GPIO pin for WS2812 data
+
+// #define WS2812_PWM_DMA_STREAM STM32_DMA1_STREAM7
+// #define WS2812_PWM_DMA_CHANNEL 7
+#define MIDI_BASIC
+#define MIDI_ADVANCED
+#define MIDI_TONE_KEYCODE_OCTAVES 2
+
+#define RGB_MATRIX_MAXIMUM_BRIGHTNESS 150
+#define RGB_MATRIX_HUE_STEP 8
+#define RGB_MATRIX_SAT_STEP 8
+#define RGB_MATRIX_VAL_STEP 8
+#define RGB_MATRIX_SPD_STEP 10
+
+#define RP2040_DEVICE RP2040
+#define RP2040_BOOTLOADER_DOUBLE_TAP_RESET
+#define RP2040_BOOTLOADER_DOUBLE_TAP_RESET_TIMEOUT 1000U
+
+#define PICO_SDK_PATH "/c/Users/niall/qmk_firmware/lib/pico-sdk" // Linux format
+#define PICO_BOARD "pico" // or "pico_w" if using the wireless version
+#define PICO_RP2040 // Should be uncommented

@@ -18,5 +18,4 @@
 
 #include_next <board.h>
 
-#undef STM32_HSECLK
-#define STM32_HSECLK 16000000
+#define RP_XOSCCLK 12000000
