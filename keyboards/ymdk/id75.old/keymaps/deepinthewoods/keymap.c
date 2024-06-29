@@ -15,15 +15,13 @@
 
 #define MIDI_CC_KEY 30
 
-#define NUM_MIDI_KEYS 65
-
 MidiDevice midi_device;
 
 bool toggle_states[8] = {false, false, false, false, false, false, false, false};
 
 uint8_t relativeNotes[MATRIX_ROWS][MATRIX_COLS]  = {0};
 
-uint8_t key_signature = 0;
+uint8_t keySignature = 0;
 
 bool enabledSus4 = false, enabledSus2 = false, enabledGreen = false;
 
@@ -37,9 +35,12 @@ enum custom_keycodes {
     TOGGLE_3,
 	TOGGLE_4,
 	TOGGLE_5,
+	TOGGLE_6,
+	TOGGLE_7,
+	TOGGLE_8,
 	SUS2_ENABLE,
 	SUS4_ENABLE,
-	RISKY_CHORDS_ENABLE
+	GREEN_CHORDS_ENABLE
 	
 };
 
@@ -73,14 +74,14 @@ const uint8_t IIIm7b5 = 8,
 
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-        [0] = LAYOUT_ortho_5x15(RISKY_CHORDS_ENABLE, TOGGLE_1, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2, MI_Ds2, MI_D2, MI_Cs2, MI_C2, MI_B1,
+        [0] = LAYOUT_ortho_5x15(GREEN_CHORDS_ENABLE, TOGGLE_1, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2, MI_Ds2, MI_D2, MI_Cs2, MI_C2, MI_B1,
 								SUS2_ENABLE, TOGGLE_2, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2,
 								SUS4_ENABLE, TOGGLE_3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2,
-								TOGGLE_4, MIDI_CC_UP, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3,
-								TOGGLE_5, MIDI_CC_DOWN, MI_G4, MI_Fs4, MI_F4, MI_E4, MI_Ds4, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3),
+								TOGGLE_5, MIDI_CC_UP, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3,
+								TOGGLE_7, MIDI_CC_DOWN, MI_G4, MI_Fs4, MI_F4, MI_E4, MI_Ds4, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3),
 								
         [1] = LAYOUT_ortho_5x15(
-			KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, 
+			RESET, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, 
 		KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, 
 		 KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, RGB_MOD,
 		  KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS
@@ -109,7 +110,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 // 		{}//7
 // }
 
-uint8_t nextChordsSafe[][7] = {
+uint8_t nextChordsMugglinBlue[][7] = {
 	{},//0
 		{2,3,4,5,6,7},//1
 			{3,5, IVm7, bII7, Io5},//2
@@ -123,7 +124,7 @@ uint8_t nextChordsSafe[][7] = {
 
 
 
-uint8_t nextChordsRisky[][5] = {
+uint8_t nextChordsMugglinGreen[][5] = {
 	{},//0
 		{},//1
 		{},//2
@@ -162,6 +163,8 @@ uint8_t nextChordsRisky[][5] = {
 };
 
 
+		
+
 
 
 #if defined(ENCODER_ENABLE) && defined(ENCODER_MAP_ENABLE)
@@ -171,53 +174,10 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 #endif // defined(ENCODER_ENABLE) && defined(ENCODER_MAP_ENABLE)
 
 
-// Define colors as 3-element arrays
-#define IN_SCALE    {255, 0,   0}
-#define NOT_IN_SCALE  {0,   255, 0}
-#define CURRENTLY_PLAYED   {0,   0,   255}
-#define FEEDBACK_PLAYED  {255, 255, 255}
-#define CHORD_GREEN  {0,   0,   0}
-#define CHORD_BLUE {0, 0, 255}
-
-// Enum for color indices
-enum led_colors {
-    COLOR_IN_SCALE,
-    COLOR_NOT_IN_SCALE,
-    COLOR_CURRENTLY_PLAYED,
-    COLOR_FEEDBACK_PLAYED,
-    COLOR_CHORD_RISKY,
-	COLOR_CHORD_SAFE,
-    // Add more colors as needed
-    NUM_LED_COLORS // This will automatically be the count of colors
-};
-
-// Create an array of color arrays
-const uint8_t PROGMEM LED_COLORS[][3] = {
-    IN_SCALE   ,
- 	NOT_IN_SCALE ,
- 	CURRENTLY_PLAYED ,
- 	FEEDBACK_PLAYED ,
- 	CHORD_GREEN ,
- 	CHORD_BLUE ,
-};
-
-// Function to set color from the array
-void set_led(uint8_t led_index, enum led_colors color) {
-	
-    rgb_matrix_set_color(led_index, 
-                         pgm_read_byte(&LED_COLORS[color][0]),
-                         pgm_read_byte(&LED_COLORS[color][1]),
-                         pgm_read_byte(&LED_COLORS[color][2]));
-}
-
-void set_xy_led(uint8_t y, uint8_t x, enum led_colors color) {
-	uint8_t led_index = g_led_config.matrix_co[y][x];
-	set_led(led_index, color);
-}
 
 
-void setKeyLEDs(uint8_t keySignature){
-	key_signature = keySignature;
+void setKeyLEDs(uint8_t key_signature){
+	keySignature = key_signature;
 	for (int y = 0; y < 5; y++){
 		for (int x = 2; x < 15; x++){
 			uint8_t keycode = pgm_read_word(&keymaps[0][y][x]);
@@ -259,16 +219,7 @@ void redrawLEDs(void){
             }
 		}
 	}
-}
-
-void redrawLED(int y, int x){
-			uint8_t keycode = relativeNotes[y][x];
-			uint8_t led_index = g_led_config.matrix_co[y][x]; // Get the LED index for the current row and column
-            if (is_in_scale(keycode)){
-                rgb_matrix_set_color(led_index, 0, 0, 255); // Set color to blue (RGB values: 0, 0, 255)
-            } else {
-                rgb_matrix_set_color(led_index, 0, 0, 0); // Set color to off (RGB values: 0, 0, 0)
-            }
+	
 }
 
 void midi_receive_cc(MidiDevice* device, uint8_t channel, uint8_t control, uint8_t value) {
@@ -276,7 +227,8 @@ void midi_receive_cc(MidiDevice* device, uint8_t channel, uint8_t control, uint8
         case MIDI_CC_KEY:
             setKeyLEDs(value);
 			redrawLEDs();
-            break;        
+            break;
+        
     }
 }
 
@@ -285,83 +237,20 @@ void matrix_init_user(void) {
     midi_register_cc_callback(&midi_device, midi_receive_cc);
 }
 
-#define MAX_NOTES_PER_CHORD 7
-
-struct ChordState {
-    uint8_t notes[MAX_NOTES_PER_CHORD];
-    uint8_t note_count;
-};
-
-struct ChordState chord_states[NUM_MIDI_KEYS];
-
 bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
-    if (keycode >= MI_B1 && keycode <= MI_A4) {
-        uint8_t chord_index = keycode - MI_B1;
-        struct ChordState *chord = &chord_states[chord_index];
-
-        if (record->event.pressed) {
-            // Clear previous chord state
-            chord->note_count = 0;
-
-            // Add base note
-            uint8_t base_note = keycode - MI_Cs3 + 60;
-            uint8_t scale_degree = (base_note - key_signature + 12) % 12;
-            uint8_t scale_index = 0;
-            for (int i = 0; i < 7; i++) {
-                if (major_scale[i] == scale_degree) {
-                    scale_index = i;
-                    break;
-                }
-            }
-
-            chord->notes[chord->note_count++] = base_note;
-
-            // Add 3rd if TOGGLE_1 is on
-            if (toggle_states[0]) {
-                uint8_t third = base_note + major_scale[(scale_index + 2) % 7] - major_scale[scale_index];
-                if (third < base_note) third += 12;
-                chord->notes[chord->note_count++] = third;
-            }
-
-            // Add 5th if TOGGLE_2 is on
-            if (toggle_states[1]) {
-                uint8_t fifth = base_note + major_scale[(scale_index + 4) % 7] - major_scale[scale_index];
-                if (fifth < base_note) fifth += 12;
-                chord->notes[chord->note_count++] = fifth;
-            }
-
-            // Add 7th if TOGGLE_3 is on
-            if (toggle_states[2]) {
-                uint8_t seventh = base_note + major_scale[(scale_index + 6) % 7] - major_scale[scale_index];
-                if (seventh < base_note) seventh += 12;
-                chord->notes[chord->note_count++] = seventh;
-            }
-
-            // Send note-on for all notes in the chord
-            for (int i = 0; i < chord->note_count; i++) {
-                midi_send_noteon(&midi_device, 0, chord->notes[i], 127);
-            }
-        } else {
-            // Send note-off for all notes in the chord
-            for (int i = 0; i < chord->note_count; i++) {
-                midi_send_noteoff(&midi_device, 0, chord->notes[i], 0);
-            }
-            // Clear chord state
-            chord->note_count = 0;
+    if (record->event.pressed) {
+        if (keycode >= MI_B1 && keycode <= MI_A4) {
+            uint8_t note = keycode - MI_Cs3 + 60; // 60 is MIDI note number for C3
+            midi_send_noteon(&midi_device, 0, note, 127);
         }
-        return false;
+    } else {
+        if (keycode >= MI_B1 && keycode <= MI_A4) {
+            uint8_t note = keycode - MI_Cs3 + 60;
+            midi_send_noteoff(&midi_device, 0, note, 0);
+        }
     }
-    return true;
-
+	return true;
 }
-
-// bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-//     if (!process_midi_messages(keycode, record)) {
-//         return false;
-//     }
-
-//     // Rest of your switch statement for other keys...
-// }
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     process_midi_messages(keycode, record);
@@ -378,8 +267,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
 		
         case TOGGLE_1:case TOGGLE_4:case TOGGLE_5:
-        case TOGGLE_2:
-        case TOGGLE_3:
+        case TOGGLE_2:case TOGGLE_6:case TOGGLE_7:
+        case TOGGLE_3:case TOGGLE_8:
             if (record->event.pressed) {
                 uint8_t index = keycode - TOGGLE_1;
                 toggle_states[index] = !toggle_states[index];
@@ -391,21 +280,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 }
             }
             return false;
-		case RISKY_CHORDS_ENABLE:
+		case GREEN_CHORDS_ENABLE:
 			if (record->event.pressed) 
 				enabledGreen = true;
 			else enabledGreen = false;
 			redrawLEDs();
 			return false;
 		case SUS2_ENABLE:
-			// if (record->event.pressed) 
-			// 	enabledSus2 = true;
-			// else enabledSus2 = false;
+			if (record->event.pressed) 
+				enabledSus2 = true;
+			else enabledSus2 = false;
 			return false;
 		case SUS4_ENABLE:
-		// if (record->event.pressed) 
-		// 		enabledSus4 = true;
-		// 	else enabledSus4 = false;
+		if (record->event.pressed) 
+				enabledSus4 = true;
+			else enabledSus4 = false;
 			return false;
 
         default:
