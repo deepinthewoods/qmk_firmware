@@ -1,8 +1,19 @@
+//Midi keyboard with automatic chord playing and guides for Stephen Mugglin's Chord Maps
+
 #include QMK_KEYBOARD_H
 #include "custom_actions.c"
 #include "quantum.h"
 #include "midi.h"
 #include "rgb_matrix.h"
+#include "id75.h"
+
+
+#if defined(CONSOLE_ENABLE)
+    #include "print.h"
+#else
+    #include "debug.h"
+#endif
+
 
 #define MIDI_CC_TOGGLE_1 20
 #define MIDI_CC_TOGGLE_2 21
@@ -12,6 +23,9 @@
 #define MIDI_CC_TOGGLE_6 25
 #define MIDI_CC_TOGGLE_7 26
 #define MIDI_CC_TOGGLE_8 27
+#define MIDI_CC_TOGGLE_9 28
+#define MIDI_CC_TOGGLE_10 29
+
 
 #define MIDI_CC_KEY 30
 
@@ -19,7 +33,7 @@
 
 MidiDevice midi_device;
 
-bool toggle_states[8] = {false, false, false, false, false, false, false, false};
+bool toggle_states[10] = {false, false, false, false, false, false, false, false, false, false};
 
 uint8_t relativeNotes[MATRIX_ROWS][MATRIX_COLS]  = {0};
 
@@ -32,6 +46,13 @@ const uint8_t major_scale[] = {0, 2, 4, 5, 7, 9, 11};
 uint8_t last_chord_index = 0;
 bool risky_mode = false;
 
+// Add this global variable
+uint8_t chord_grid[MATRIX_ROWS][MATRIX_COLS] = {0};  // Initialize all to 0
+
+bool risky_chord_played = false;
+
+bool initted = false;
+
 enum custom_keycodes {
     MIDI_CC_UP = SAFE_RANGE,
     MIDI_CC_DOWN,
@@ -40,6 +61,11 @@ enum custom_keycodes {
     TOGGLE_3,
 	TOGGLE_4,
 	TOGGLE_5,
+    TOGGLE_6,
+    TOGGLE_7,
+    TOGGLE_8,
+    TOGGLE_9,
+    TOGGLE_10,
 	SUS2_ENABLE,
 	SUS4_ENABLE,
 	RISKY_CHORDS_ENABLE
@@ -75,14 +101,14 @@ const uint8_t IIIm7b5 = 8,
 		bII7 = 33;
 
 const int8_t chord_tones[][5] = {
-    {-1, -1, -1, -1, -1},  // 0 (blank)
-    {0, 4, 7, -1, -1},     // 1 (I)
-    {0, 4, 7, -1, -1},     // 2 (II)
-    {0, 4, 7, -1, -1},     // 3 (III)
-    {0, 4, 7, -1, -1},     // 4 (IV)
-    {0, 4, 7, -1, -1},     // 5 (V)
-    {0, 4, 7, -1, -1},     // 6 (VI)
-    {0, 4, 7, -1, -1},     // 7 (VII)
+    {0, -1, -1, -1, -1},  // 0 (blank)
+    {0, 4, 7, 11, -1},     // 1 (I7)
+    {0, 4, 7, 11, -1},     // 2 (II7)
+    {0, 4, 7, 11, -1},     // 3 (III7)
+    {0, 4, 7, 11, -1},     // 4 (IV7)
+    {0, 4, 7, 11, -1},     // 5 (V7)
+    {0, 4, 7, 11, -1},     // 6 (VI7)
+    {0, 4, 7, 10, -1},     // 7 (VII7) - Note: typically a diminished 7th
     {0, 3, 6, 10, -1},     // 8 (IIIm7b5)
     {0, 3, 6, 9, -1},      // 9 (#Idim7)
     {0, 4, 7, -1, -1},     // 10 (VI)
@@ -149,9 +175,9 @@ const int8_t chord_root_offsets[] = {
 };
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-        [0] = LAYOUT_ortho_5x15(RISKY_CHORDS_ENABLE, TOGGLE_1, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2, MI_Ds2, MI_D2, MI_Cs2, MI_C2, MI_B1,
-								SUS2_ENABLE, TOGGLE_2, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2,
-								SUS4_ENABLE, TOGGLE_3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2,
+        [0] = LAYOUT_ortho_5x15(RISKY_CHORDS_ENABLE, TOGGLE_6, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2, MI_Ds2, MI_D2, MI_Cs2, MI_C2, MI_B1,
+								SUS2_ENABLE, TOGGLE_7, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2,
+								SUS4_ENABLE, TOGGLE_8, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2,
 								TOGGLE_4, MIDI_CC_UP, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3,
 								TOGGLE_5, MIDI_CC_DOWN, MI_G4, MI_Fs4, MI_F4, MI_E4, MI_Ds4, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3),
 								
@@ -254,6 +280,7 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 #define FEEDBACK_PLAYED  {255, 255, 255}
 #define CHORD_GREEN  {0,   255,   0}
 #define CHORD_BLUE {0, 0, 255}
+#define KEY_CENTER {255, 0, 255}
 
 // Enum for color indices
 enum led_colors {
@@ -263,6 +290,7 @@ enum led_colors {
     COLOR_FEEDBACK_PLAYED,
     COLOR_CHORD_RISKY,
 	COLOR_CHORD_SAFE,
+	COLOR_KEY_CENTER,
     // Add more colors as needed
     NUM_LED_COLORS // This will automatically be the count of colors
 };
@@ -275,21 +303,8 @@ const uint8_t PROGMEM LED_COLORS[][3] = {
  	FEEDBACK_PLAYED ,
  	CHORD_GREEN ,
  	CHORD_BLUE ,
+	KEY_CENTER ,
 };
-
-// Function to set color from the array
-void set_led(uint8_t led_index, enum led_colors color) {
-	
-    rgb_matrix_set_color(led_index, 
-                         pgm_read_byte(&LED_COLORS[color][0]),
-                         pgm_read_byte(&LED_COLORS[color][1]),
-                         pgm_read_byte(&LED_COLORS[color][2]));
-}
-
-void set_xy_led(uint8_t y, uint8_t x, enum led_colors color) {
-	uint8_t led_index = g_led_config.matrix_co[y][x];
-	set_led(led_index, color);
-}
 
 
 void setKeyLEDs(uint8_t keySignature){
@@ -309,6 +324,7 @@ void setKeyLEDs(uint8_t keySignature){
 			relativeNotes[y][x] = adjusted_note;
 		}
 	}
+    update_next_chord_leds();
 }
 
 bool is_in_scale(uint8_t adjusted_note) {
@@ -323,42 +339,55 @@ bool is_in_scale(uint8_t adjusted_note) {
     return false;
 }
 
-void redrawLEDs(void){
-	for (int y = 0; y < 5; y++){
-		for (int x = 2; x < 15; x++){
-			uint8_t keycode = relativeNotes[y][x];
-			uint8_t led_index = g_led_config.matrix_co[y][x]; // Get the LED index for the current row and column
-            if (is_in_scale(keycode)){
-                rgb_matrix_set_color(led_index, 0, 0, 255); // Set color to blue (RGB values: 0, 0, 255)
-            } else {
-                rgb_matrix_set_color(led_index, 0, 0, 0); // Set color to off (RGB values: 0, 0, 0)
-            }
-		}
-	}
+void set_xy_led(uint8_t x, uint8_t y, uint8_t color_index) {
+    uint8_t led_index = g_led_config.matrix_co[y][x];
+    if (led_index != NO_LED) {
+        rgb_matrix_set_color(led_index, 
+                             pgm_read_byte(&LED_COLORS[color_index][0]),
+                             pgm_read_byte(&LED_COLORS[color_index][1]),
+                             pgm_read_byte(&LED_COLORS[color_index][2]));
+    }
 }
-
-void redrawLED(int y, int x){
-			uint8_t keycode = relativeNotes[y][x];
-			uint8_t led_index = g_led_config.matrix_co[y][x]; // Get the LED index for the current row and column
-            if (is_in_scale(keycode)){
-                rgb_matrix_set_color(led_index, 0, 0, 255); // Set color to blue (RGB values: 0, 0, 255)
-            } else {
-                rgb_matrix_set_color(led_index, 0, 0, 0); // Set color to off (RGB values: 0, 0, 0)
-            }
-}
-
+uint8_t midiR = 0;
 void midi_receive_cc(MidiDevice* device, uint8_t channel, uint8_t control, uint8_t value) {
+    xprintf("midi cc in %d %d %d\n", channel, value, control);
+    midiR++;
     switch (control) {
         case MIDI_CC_KEY:
+            xprintf("set key %d\n", value);
+
             setKeyLEDs(value);
-			redrawLEDs();
+			// redrawLEDs();
             break;        
     }
 }
 
+
+
 void matrix_init_user(void) {
+    initted = true;
+    dprint("keyboard_post_init_user\n");
+    dprint("matrix_init_user start\n");
     midi_device_init(&midi_device);
     midi_register_cc_callback(&midi_device, midi_receive_cc);
+    rgb_matrix_enable();
+    xprintf("RGB Matrix initialized\n");
+    setKeyLEDs(0);
+    // rgb_matrix_set_color_all(0, 0, 0);  // Turn off all LEDs
+}
+
+void keyboard_pre_init_user(void) {
+    debug_enable=true;
+    debug_matrix=true;
+    dprint("keyboard_pre_init_user\n");
+}
+
+void keyboard_post_init_user(void) {
+    
+    // redrawLEDs();
+ 
+    // rgb_matrix_sethsv_noeeprom(HSV_OFF); // Set all LEDs to off
+    dprint("MIDI CC callback registered\n");
 }
 
 #define MAX_NOTES_PER_CHORD 7
@@ -371,29 +400,69 @@ struct ChordState {
 struct ChordState chord_states[NUM_MIDI_KEYS];
 
 bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
+    xprintf("process midi mesages \n");
+    if (initted)
+        xprintf("has initted \n");
     if (keycode >= MI_B1 && keycode <= MI_G4) {
+        xprintf("MIDI keycode detected %d %d\n", keycode, MI_B2);
         uint8_t chord_index = keycode - MI_B1;
         struct ChordState *chord = &chord_states[chord_index];
 
         if (record->event.pressed) {
+            xprintf("Key pressed \n");
             // Clear previous chord state
             chord->note_count = 0;
 
-            // Add base note
+            uint8_t row = record->event.key.row;
+            uint8_t col = record->event.key.col;
+            uint8_t chord_type = chord_grid[row][col];
             uint8_t base_note = keycode - MI_Cs3 + 60;
-            
 
-            chord->notes[chord->note_count++] = base_note;
+            bool is_regular_chord = (chord_type >= 1 && chord_type <= 7);
 
-            
+            for (int i = 0; i < 5; i++) {
+                xprintf("iterate a\n");
+                int8_t interval = chord_tones[chord_type][i];
+                if (interval == -1){
+                    xprintf("exit early, no interval \n");
+                    // dprint("exit early, no interval\n");
+                    break;
+                } 
+                // xprintf("iterate b\n");
+                uint8_t note = base_note + interval;
+
+                bool add_note = false;
+                if (is_regular_chord) {
+                    xprintf("is_regular_chord: \n");
+                    // For regular chords (1-7)
+                    if (i == 0) add_note = true;  // Always add root
+                    else if (i == 1 && toggle_states[0]) add_note = true;  // 2nd note if TOGGLE_1 is on
+                    else if (i == 2 && toggle_states[1]) add_note = true;  // 3rd note if TOGGLE_2 is on
+                    else if (i == 3 && toggle_states[2]) add_note = true;  // 7th note if TOGGLE_3 is on
+                } else {
+                    xprintf("not is_regular_chord: %d\n", is_regular_chord);
+                    // For other chords, always add all defined notes
+                    add_note = true;
+                }
+
+                if (add_note) {
+                    xprintf("add note : %d\n", note);
+                    chord->notes[chord->note_count++] = note;
+                }
+            }
 
             // Send note-on for all notes in the chord
             for (int i = 0; i < chord->note_count; i++) {
+                xprintf("MIDI noteon %d\n", chord->notes[i]);
                 midi_send_noteon(&midi_device, 0, chord->notes[i], 127);
             }
         } else {
             // Send note-off for all notes in the chord
+            xprintf("MIDI up %d\n", chord->note_count);
+
             for (int i = 0; i < chord->note_count; i++) {
+                xprintf("MIDI noteoff %d\n", chord->notes[i]);
+
                 midi_send_noteoff(&midi_device, 0, chord->notes[i], 0);
             }
             // Clear chord state
@@ -401,17 +470,25 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
         }
         return false;
     }
+    xprintf("Exiting process_midi_messages\n");
     return true;
-
 }
 
-// Add this global variable
-uint8_t chord_grid[MATRIX_ROWS][MATRIX_COLS] = {0};  // Initialize all to 0
 
-// Modify the update_next_chord_leds function
+
+
+
 void update_next_chord_leds(void) {
-    const uint8_t (*next_chords)[7] = risky_mode ? nextChordsRisky : nextChordsSafe;
-    uint8_t num_next_chords = risky_mode ? 5 : 7;  // Adjust based on actual array sizes
+    const uint8_t (*next_chords)[7];
+    uint8_t num_next_chords;
+
+    if (risky_chord_played || (risky_mode && !risky_chord_played)) {
+        next_chords = nextChordsRisky;
+        num_next_chords = 5;  // Adjust based on actual array size
+    } else {
+        next_chords = nextChordsSafe;
+        num_next_chords = 7;  // Adjust based on actual array size
+    }
 
     // Turn off all LEDs first and clear the chord grid
     rgb_matrix_set_color_all(0, 0, 0);
@@ -429,7 +506,7 @@ void update_next_chord_leds(void) {
             for (int y = 0; y < MATRIX_ROWS; y++) {
                 for (int x = 2; x < MATRIX_COLS; x++) {
                     if (relativeNotes[y][x] == root_offset) {
-                        set_xy_led(y, x, risky_mode ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE);
+                        set_xy_led(x, y, (risky_chord_played || risky_mode) ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE);
                         chord_grid[y][x] = next_chord_index;  // Store the chord index in the grid
                         goto next_chord;  // Move to the next chord after finding the first matching key
                     }
@@ -439,22 +516,52 @@ void update_next_chord_leds(void) {
         next_chord:
         continue;
     }
+    // rgb_matrix_update_pwm_buffers();
 }
 
+
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-     if (keycode >= MI_B1 && keycode <= MI_G4) {  
-        if (record->event.pressed) {
-            uint8_t y = record->event.key.row;
-            uint8_t x = record->event.key.col;
-            uint8_t chord_index = chord_grid[y][x];
+    xprintf("process_record_user called: keycode = %u %d\n", keycode, midiR);
+    //  if (keycode >= MI_B1 && keycode <= MI_G4) {  
+    //     if (record->event.pressed) {
+    //         uint8_t y = record->event.key.row;
+    //         uint8_t x = record->event.key.col;
+    //         uint8_t chord_index = chord_grid[y][x];
             
-            if (chord_index != 0) {  // If a valid chord index is found
-                last_chord_index = chord_index;
-                update_next_chord_leds();
-            }
-        }
-        return process_midi_messages(keycode, record);
-    }
+    //         if (chord_index != 0) {  // If a valid chord index is found
+    //             last_chord_index = chord_index;
+    //             update_next_chord_leds();
+    //         }
+    //     }
+    //     return process_midi_messages(keycode, record);
+    // }
+
+	if (keycode >= MI_B1 && keycode <= MI_G4) {  
+		if (record->event.pressed) {
+			uint8_t y = record->event.key.row;
+			uint8_t x = record->event.key.col;
+			uint8_t chord_index = chord_grid[y][x];
+			
+			if (chord_index != 0) {  // If a valid chord index is found
+				last_chord_index = chord_index;
+				
+				// Check if this is a risky chord
+				bool is_risky_chord = (chord_index > 7);  // Assuming chords 1-7 are safe, and 8+ are risky
+				
+				if (is_risky_chord) {
+					risky_chord_played = true;
+				} else if (risky_chord_played) {
+					// If we're playing a safe chord after a risky one, reset
+					risky_chord_played = false;
+				}
+				
+				update_next_chord_leds();
+			}
+		}
+        
+		return process_midi_messages(keycode, record);
+	}
 
 	switch (keycode) {
         case MIDI_CC_UP:
@@ -469,28 +576,39 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
 		
         case TOGGLE_1:case TOGGLE_4:case TOGGLE_5:
-        case TOGGLE_2:
-        case TOGGLE_3:
+        case TOGGLE_2:case TOGGLE_6:case TOGGLE_7:
+        case TOGGLE_3:case TOGGLE_8:case TOGGLE_9:case TOGGLE_10:
             if (record->event.pressed) {
                 uint8_t index = keycode - TOGGLE_1;
                 toggle_states[index] = !toggle_states[index];
                 midi_send_cc(&midi_device, midi_config.channel, MIDI_CC_TOGGLE_1 + index, toggle_states[index] ? 127 : 0);
+                xprintf("Toggle %d state: %d\n", index + 1, toggle_states[index]);
                 if (toggle_states[index]) {
-                    rgb_matrix_set_color(index, RGB_RED);
+                    //  rgb_matrix_set_color(index, 255, 0, 0);
+                    //rgb_matrix_set_color(1+index, RGB_RED); 
+                    xprintf("Setting LED %d to red\n", index);
                 } else {
-                    rgb_matrix_set_color(index, RGB_OFF);
+                    // rgb_matrix_set_color(index, 0, 0, 0);
+                    //rgb_matrix_set_color(1+index, RGB_OFF); 
+
+                    xprintf("Turning LED %d off\n", index);
                 }
             }
+            // rgb_matrix_update_pwm_buffers();
+            // rgb_matrix_mode_noeeprom(RGB_MATRIX_SOLID_COLOR); // Refresh the display
+
             return false;
 		case RISKY_CHORDS_ENABLE:
-            if (record->event.pressed) {
-                risky_mode = true;
-                update_next_chord_leds();
-            } else {
-                risky_mode = false;
-                update_next_chord_leds();
-            }
-            return false;
+			if (record->event.pressed) {
+				risky_mode = true;
+				update_next_chord_leds();
+			} else {
+				risky_mode = false;
+				if (!risky_chord_played) {
+					update_next_chord_leds();
+				}
+			}
+			return false;
 		case SUS2_ENABLE:
 			// if (record->event.pressed) 
 			// 	enabledSus2 = true;
@@ -508,3 +626,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    
+    update_next_chord_leds();
+    for (uint8_t index = 0; index < 5; index++){
+        if (toggle_states[index]) {
+            set_xy_led(0, index, (risky_chord_played || risky_mode) ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE);
+        } else {
+            set_xy_led(0, index, (risky_chord_played || risky_mode) ? COLOR_CURRENTLY_PLAYED : COLOR_FEEDBACK_PLAYED);
+        }
+         if (toggle_states[index+5]) {
+            set_xy_led(1, index, (risky_chord_played || risky_mode) ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE);
+        } else {
+            set_xy_led(1, index, (risky_chord_played || risky_mode) ? COLOR_CURRENTLY_PLAYED : COLOR_FEEDBACK_PLAYED);
+        }             
+    }
+    
+   
+
+    return false;
+}

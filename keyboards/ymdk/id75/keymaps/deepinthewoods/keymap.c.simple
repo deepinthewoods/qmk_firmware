@@ -1,0 +1,186 @@
+#include QMK_KEYBOARD_H
+// First, add these includes at the top of your file if they're not already there
+#include "quantum.h"
+#include "rgb_matrix.h"
+
+
+#define BACK_LED_COUNT 14
+#ifdef RGB_MATRIX_CUSTOM_USER
+RGB_MATRIX_EFFECT(CUSTOM_OFF)
+
+bool CUSTOM_OFF(effect_params_t* params) {
+    RGB_MATRIX_USE_LIMITS(led_min, led_max);
+
+    for (uint8_t i = led_min; i < led_max; i++) {
+        rgb_matrix_set_color(i, RGB_OFF);
+    }
+    return false;
+}
+#endif
+
+// Layer definitions
+enum layers {
+    _BASE,
+    _LOWER,
+    _RAISE,
+    _ADJUST
+};
+// Custom keycodes
+enum custom_keycodes {
+    QWERTY = SAFE_RANGE,
+    TOGGLE1,
+    TOGGLE2
+};
+// Global variables to store toggle states
+bool toggle1_state = false;
+bool toggle2_state = false;
+
+
+const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
+    /* Base Layer: QWERTY
+     * ,-------------------------------------------------------------------------------------------------.
+     * | ESC  |  1   |  2   |  3   |  4   |  5   |  6   |  7   |  8   |  9   |  0   |  -   |  =   | BSPC |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | TAB  |  Q   |  W   |  E   |  R   |  T   |  Y   |  U   |  I   |  O   |  P   |  [   |  ]   |  \   |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | CAPS |  A   |  S   |  D   |  F   |  G   |  H   |  J   |  K   |  L   |  ;   |  '   | Enter|      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | LSFT |  Z   |  X   |  C   |  V   |  B   |  N   |  M   |  ,   |  .   |  /   | RSFT | UP   |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | LCTL | LGUI | LALT |LOWER | SPACE| SPACE| SPACE|RAISE | RALT | RGUI | RCTL | LEFT | DOWN |RIGHT |
+     * `-------------------------------------------------------------------------------------------------'
+     */
+    [_BASE] = LAYOUT_ortho_5x15(
+        TOGGLE1, TOGGLE2, KC_2,    KC_3,    KC_4,    KC_5,    KC_6,    KC_7,    KC_8,    KC_9,    KC_0,    KC_MINS, KC_EQL,  KC_BSPC, KC_BSPC,
+        KC_TAB,  KC_Q,    KC_W,    KC_E,    KC_R,    KC_T,    KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_LBRC, KC_RBRC, KC_BSLS, KC_DEL,
+        KC_CAPS, KC_A,    KC_S,    KC_D,    KC_F,    KC_G,    KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_QUOT, KC_ENT,  KC_ENT,  KC_PGUP,
+        KC_LSFT, KC_Z,    KC_X,    KC_C,    KC_V,    KC_B,    KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH, KC_RSFT, KC_RSFT, KC_UP,   KC_PGDN,
+        KC_LCTL, KC_LGUI, KC_LALT, MO(_LOWER), KC_SPC, KC_SPC, KC_SPC, MO(_RAISE), KC_RALT, KC_RGUI, KC_RCTL, KC_LEFT, KC_DOWN, KC_RGHT, KC_MUTE
+    ),
+
+    /* Lower Layer: Function keys, RGB
+     * ,-------------------------------------------------------------------------------------------------.
+     * |  F1  |  F2  |  F3  |  F4  |  F5  |  F6  |  F7  |  F8  |  F9  | F10  | F11  | F12  |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      | RGBT | RGBM | RGBH+| RGBH-| RGBS+| RGBS-| RGBV+| RGBV-|      |      |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |      |      |      |      |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |      |      |      |      |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |      |      |      |      |      |      |      |
+     * `-------------------------------------------------------------------------------------------------'
+     */
+    [_LOWER] = LAYOUT_ortho_5x15(
+    KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5,   KC_F6,   KC_F7,   KC_F8,   KC_F9,   KC_F10,  KC_F11,  KC_F12,  _______, _______, _______,
+    _______, RGB_TOG, RGB_MOD, RGB_HUI, RGB_HUD, RGB_SAI, RGB_SAD, RGB_VAI, RGB_VAD, RGB_SPI, RGB_SPD, _______, _______, _______, _______,
+    _______, RGB_M_P, RGB_M_B, RGB_M_R, RGB_M_SW, RGB_M_SN, RGB_M_K, RGB_M_X, RGB_M_G, _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______
+),
+
+    /* Raise Layer: Numpad
+     * ,-------------------------------------------------------------------------------------------------.
+     * |      |      |      |      |      |      |      |   7  |   8  |   9  |   /  |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |   4  |   5  |   6  |   *  |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |   1  |   2  |   3  |   -  |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |   0  |   .  |   =  |   +  |      |      |      |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * |      |      |      |      |      |      |      |      |      |      |      |      |      |      |
+     * `-------------------------------------------------------------------------------------------------'
+     */
+    [_RAISE] = LAYOUT_ortho_5x15(
+        _______, _______, _______, _______, _______, _______, _______, KC_7,    KC_8,    KC_9,    KC_PSLS, _______, _______, _______, _______,
+        _______, _______, _______, _______, _______, _______, _______, KC_4,    KC_5,    KC_6,    KC_PAST, _______, _______, _______, _______,
+        _______, _______, _______, _______, _______, _______, _______, KC_1,    KC_2,    KC_3,    KC_PMNS, _______, _______, _______, _______,
+        _______, _______, _______, _______, _______, _______, _______, KC_0,    KC_DOT,  KC_PEQL, KC_PPLS, _______, _______, _______, _______,
+        _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______
+    ),
+
+    /* Adjust Layer (Lower + Raise)
+     * ,-------------------------------------------------------------------------------------------------.
+     * |  RST | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX |
+     * |------+------+------+------+------+------+------+------+------+------+------+------+------+------|
+     * | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX | XXXX |
+     * `-------------------------------------------------------------------------------------------------'
+     */
+    [_ADJUST] = LAYOUT_ortho_5x15(
+        QK_BOOT, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
+        XXXXXXX, XXXXXXX, XXXXXXX, _______, XXXXXXX, XXXXXXX, XXXXXXX, _______, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX
+    )
+};
+
+layer_state_t layer_state_set_user(layer_state_t state) {
+    return update_tri_layer_state(state, _LOWER, _RAISE, _ADJUST);
+}
+
+
+
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+    switch (keycode) {
+        case TOGGLE1:
+            if (record->event.pressed) {
+                toggle1_state = !toggle1_state;
+                if (toggle1_state) {
+                    rgb_matrix_set_color(BACK_LED_COUNT, RGB_RED);  // Set first key to red when on
+                } else {
+                    rgb_matrix_set_color(BACK_LED_COUNT, RGB_OFF);  // Turn off LED when off
+                }
+            }
+            return false;
+        case TOGGLE2:
+            if (record->event.pressed) {
+                toggle2_state = !toggle2_state;
+                if (toggle2_state) {
+                    rgb_matrix_set_color(BACK_LED_COUNT+1, RGB_RED);  // Set second key to red when on
+                } else {
+                    rgb_matrix_set_color(BACK_LED_COUNT+1, RGB_OFF);  // Turn off LED when off
+                }
+            }
+            return false;
+        case RGB_SPI:
+            if (record->event.pressed) {
+                rgb_matrix_increase_speed();
+            }
+            return false;
+        case RGB_SPD:
+            if (record->event.pressed) {
+                rgb_matrix_decrease_speed();
+            }
+            return false;
+        default:
+            return true;
+    }
+}
+
+
+
+bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
+    // Turn off all LEDs by default
+    for (uint8_t i = led_min; i < led_max; i++) {
+        rgb_matrix_set_color(i, RGB_OFF);
+    }
+
+    // Set the toggle LEDs
+    if (toggle1_state) {
+        rgb_matrix_set_color(BACK_LED_COUNT, RGB_RED);
+    }
+    if (toggle2_state) {
+        rgb_matrix_set_color(BACK_LED_COUNT + 1, RGB_RED);
+    }
+
+    return false;
+}
+
