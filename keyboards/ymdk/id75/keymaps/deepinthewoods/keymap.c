@@ -59,6 +59,8 @@ bool sus2_active = false;
 bool sus4_active = false;
 uint16_t currently_held_chord = 0;
 
+int8_t extra_octaves = 0;
+
 enum custom_keycodes {
     MIDI_CC_UP = SAFE_RANGE,
     MIDI_CC_DOWN,
@@ -297,13 +299,39 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
 uint8_t nextChordsSafe[][7] = {
 	{},//0
-		{1,2,3,4,5,6,7},//1
+		{1,2,3,4,5,6},//1
 			{1, 3,5, IVm7, bII7, Io5},//2
 				{1,4,6},//3
 					{2,5,1, Io5},//4
 						{1, 3, 6},//5
 							{2, 4},//6
-								{}//7
+								{},//7
+        {},//IIIm7b5 = 8
+		{},//sIdim7 = 9
+		{},//VI = 10,
+		{}, //sIVm7b5 = 11,
+		{},//		VII = 12,
+		{},//		sIIdim7 = 13,
+		{},//Vm = 14,
+		{},//I = 15,
+		{},//16,
+		{},//Im6 = 17,
+		{},//vo2 = 18,
+		{},//II = 19,
+		{},//bVI = 20,
+		{},//bVII = 21,
+		{},//VIm7b5ob3 = 22,
+		{},//sVdim7 = 23,
+		{},//III = 24,
+		{},//VIIm7b5 = 25,
+		{},// 26,
+		{},//Idimob3 = 27,
+		{},//bVI7 = 28,
+		{},//bVII9 = 29,
+		{},//{io5},//sIVm7b5 = 30,
+		{2, 3, 4, 5, 6},//io5 = 31,----------
+		{1},//IVm7 = 32,////////
+		{1}//bII7 = 33;////////////
 	
 };
 
@@ -364,16 +392,17 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 #define FEEDBACK_PLAYED  {255, 255, 255}
 #define CHORD_GREEN  {0,   255,   0}
 #define CHORD_BLUE {0, 0, 255}
-#define KEY_CENTER {255, 255, 0}
+#define KEY_CENTER {255, 100, 0}
 #define TOGGLE_ON {100, 100, 100}
 #define TOGGLE_OFF {0, 0, 0}
 #define KEY_CENTER_VALID {255, 0, 255}
 #define OCTAVE_COLOR_0 {255, 0, 0}    // Bright Red
-#define OCTAVE_COLOR_1 {255, 255, 0}  // Bright Yellow
-#define OCTAVE_COLOR_2 {0, 255, 0}    // Bright Green
-#define OCTAVE_COLOR_3 {0, 255, 255}  // Bright Cyan
-#define OCTAVE_COLOR_4 {0, 0, 255}    // Bright Blue
-#define OCTAVE_COLOR_5 {255, 0, 255}  // Bright Magenta
+#define OCTAVE_COLOR_1 {255, 100, 0}    // Bright orange
+#define OCTAVE_COLOR_2 {255, 255, 0}  // Bright Yellow
+#define OCTAVE_COLOR_3 {0, 255, 0}    // Bright Green
+#define OCTAVE_COLOR_4 {0, 255, 255}  // Bright Cyan
+#define OCTAVE_COLOR_5 {0, 0, 255}    // Bright Blue
+
 // Enum for color indices
 enum led_colors {
     COLOR_IN_SCALE,
@@ -455,7 +484,7 @@ void update_next_chords(void) {
         num_next_chords = sizeof(nextChordsRisky) / sizeof(nextChordsRisky[0]);
     } else {
         next_chords = nextChordsSafe;
-        num_next_chords = sizeof(nextChordsSafe[0]) / sizeof(nextChordsSafe[0][0]);
+        num_next_chords = sizeof(nextChordsSafe) / sizeof(nextChordsSafe[0]);
     }
 
     // Clear the chord grid
@@ -529,13 +558,27 @@ void update_next_chord_leds(void) {
     set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
     set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
 
+    // Set octave and extra octaves colors
     int8_t colorIndex = octave - 3;
-    uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex);
-    xprintf("Setting octave color: %d\n", colorIndex);
+    int8_t extraOctaveIndex = extra_octaves;
+    uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) -1;
+    uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) -1;
 
-    if (colorIndex < 0)
-        set_xy_led(0, 4, octColor);
-    else if (colorIndex > 0) set_xy_led(0, 3, octColor);
+    if (risky_mode) {
+        // Display extra octaves when risky mode is active
+        if (extra_octaves < 0) {
+            set_xy_led(0, 4, extraOctColor);
+        } else if (extra_octaves > 0) {
+            set_xy_led(0, 3, extraOctColor);
+        }
+    } else {
+        // Display normal octave when risky mode is not active
+        if (colorIndex < 0) {
+            set_xy_led(0, 4, octColor);
+        } else if (colorIndex > 0) {
+            set_xy_led(0, 3, octColor);
+        }
+    }
 
     set_xy_led(1, 0, toggle_states[5] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
     set_xy_led(1, 1, toggle_states[6] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
@@ -616,7 +659,7 @@ void keyboard_post_init_user(void) {
 
 
 
-#define MAX_NOTES_PER_CHORD 7
+#define MAX_NOTES_PER_CHORD 28
 
 struct ChordState {
     uint8_t notes[MAX_NOTES_PER_CHORD];
@@ -652,25 +695,27 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
 
             bool is_regular_chord = (chord_type >= 1 && chord_type <= 7);
 
-            for (int i = 0; i < 5; i++) {
-                int8_t interval = chord_tones_to_use[chord_type][i];
-                xprintf("Interval %d: %d\n", i, interval);
-                if (interval == -1) break;
-               
-                uint8_t note = base_note + interval;
+            for (int octave_offset = 0; octave_offset <= extra_octaves; octave_offset++) {
+                for (int i = 0; i < 5; i++) {
+                    int8_t interval = chord_tones_to_use[chord_type][i];
+                    xprintf("Interval %d: %d\n", i, interval);
+                    if (interval == -1) break;
+                   
+                    uint8_t note = base_note + interval + (octave_offset * 12);
 
-                bool add_note = false;
-                if (is_regular_chord) {
-                    if (i == 0) add_note = true;  // Always add root
-                    else if (i == 1 && toggle_states[7]) add_note = true;  // 2nd note if TOGGLE_6 is on
-                    else if (i == 2 && toggle_states[8]) add_note = true;  // 3rd note if TOGGLE_7 is on
-                    else if (i == 3 && toggle_states[9]) add_note = true;  // 7th note if TOGGLE_8 is on
-                } else {
-                    add_note = true;
-                }
+                    bool add_note = false;
+                    if (is_regular_chord) {
+                        if (i == 0) add_note = true;  // Always add root
+                        else if (i == 1 && toggle_states[7]) add_note = true;  // 2nd note if TOGGLE_6 is on
+                        else if (i == 2 && toggle_states[8]) add_note = true;  // 3rd note if TOGGLE_7 is on
+                        else if (i == 3 && toggle_states[9]) add_note = true;  // 7th note if TOGGLE_8 is on
+                    } else {
+                        add_note = true;
+                    }
 
-                if (add_note) {
-                    chord->notes[chord->note_count++] = note;
+                    if (add_note && chord->note_count < MAX_NOTES_PER_CHORD) {
+                        chord->notes[chord->note_count++] = note;
+                    }
                 }
             }
 
@@ -721,7 +766,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 }
                 
                 xprintf("Chord played: %d, Risky: %d\n", last_chord_index, risky_chord_played);
-                
             }
         }
         
@@ -782,7 +826,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 }
             }
             return false;
-
         case SUS4_ENABLE:
             if (record->event.pressed) {
                 sus4_active = true;
@@ -799,26 +842,34 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         case KEY_CENTER_UP:
             if (record->event.pressed) {
-               
                 setKeyLEDs((uint8_t)(key_signature+1));
             }
             return false;
         case KEY_CENTER_DOWN:
             if (record->event.pressed) {
-                
                 setKeyLEDs((uint8_t)(key_signature-1));
             }
             return false;
         case OCTAVE_UP:
             if (record->event.pressed) {
-                octave = (octave+1) % 10;
-                midi_config.transpose = (octave-3) * 12;
+                if (risky_mode) {
+                    extra_octaves = (extra_octaves + 1 > 3) ? 3 : extra_octaves + 1;
+                } else {
+                    octave = (octave + 1) % 10;
+                    midi_config.transpose = (octave - 3) * 12;
+                }
+                update_next_chord_leds();
             }
             return false;
         case OCTAVE_DOWN:
             if (record->event.pressed) {
-                octave = (octave-1+10) % 10;
-                midi_config.transpose = (octave-3) * 12;
+                if (risky_mode) {
+                    extra_octaves = (extra_octaves - 1 < 0) ? 0 : extra_octaves - 1;
+                } else {
+                    octave = (octave - 1 + 10) % 10;
+                    midi_config.transpose = (octave - 3) * 12;
+                }
+                update_next_chord_leds();
             }
             return false;
         default:
