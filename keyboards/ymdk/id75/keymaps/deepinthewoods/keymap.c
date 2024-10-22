@@ -57,7 +57,7 @@ bool initted = false;
 
 bool sus2_active = false;
 bool sus4_active = false;
-uint16_t currently_held_chord = 0;
+
 
 int8_t extra_octaves = 0;
 
@@ -65,6 +65,11 @@ int8_t extra_octaves = 0;
 uint8_t current_system = 0; // Will be determined by toggle states
 bool sys_toggle_1 = false;
 bool sys_toggle_2 = false;
+
+bool chord_button_held = false;
+bool sus2_button_held = false;
+bool sus4_button_held = false;
+uint16_t current_chord_keycode = 0;
 
 enum custom_keycodes {
     MIDI_CC_UP = SAFE_RANGE,
@@ -162,19 +167,19 @@ const int8_t chord_tones[][5] = {
 
 const int8_t chord_tones_sus2[][5] = {
     {0, -1, -1, -1, -1},  // 0 (blank)
-    {0, 2, 7, 11, -1},    // 1 (Isus2)
+    {0, 2, 7, 11, -1},    // 1 (Isus2) - root, major second, fifth, seventh
     {0, 2, 7, 11, -1},    // 2 (IIsus2)
-    {0, 1, 7, 11, -1},    // 3 (IIIsus2) - minor 2nd
+    {0, 2, 7, 11, -1},    // 3 (IIIsus2) - changed from minor second to major second
     {0, 2, 7, 11, -1},    // 4 (IVsus2)
     {0, 2, 7, 11, -1},    // 5 (Vsus2)
     {0, 2, 7, 11, -1},    // 6 (VIsus2)
-    {0, 1, 7, 10, -1},    // 7 (VIIsus2) - minor 2nd
-    {0, 1, 6, 10, -1},    // 8 (IIIm7b5sus2) - minor 2nd
-    {0, 1, 6, 9, -1},     // 9 (#Idim7sus2) - minor 2nd
+    {0, 2, 7, 10, -1},    // 7 (VIIsus2) - keeps diminished seventh
+    {0, 2, 6, 10, -1},    // 8 (IIIm7b5sus2)
+    {0, 2, 6, 9, -1},     // 9 (#Idim7sus2)
     {0, 2, 7, -1, -1},    // 10 (VIsus2)
     {0, 2, 6, 10, -1},    // 11 (#IVm7b5sus2)
-    {0, 1, 7, -1, -1},    // 12 (VIIsus2) - minor 2nd
-    {0, 1, 6, 9, -1},     // 13 (#IIdim7sus2) - minor 2nd
+    {0, 2, 7, -1, -1},    // 12 (VIIsus2)
+    {0, 2, 6, 9, -1},     // 13 (#IIdim7sus2)
     {0, 2, 7, -1, -1},    // 14 (Vmsus2)
     {0, 2, 7, -1, -1},    // 15 (Isus2)
     {-1, -1, -1, -1, -1}, // 16 (blank)
@@ -183,32 +188,32 @@ const int8_t chord_tones_sus2[][5] = {
     {0, 2, 7, -1, -1},    // 19 (IIsus2)
     {0, 2, 7, -1, -1},    // 20 (bVIsus2)
     {0, 2, 7, -1, -1},    // 21 (bVIIsus2)
-    {0, 1, 6, 10, -1},    // 22 (VIm7b5ob3sus2) - minor 2nd
-    {0, 1, 6, 9, -1},     // 23 (#Vdim7sus2) - minor 2nd
-    {0, 1, 7, -1, -1},    // 24 (IIIsus2) - minor 2nd
-    {0, 1, 6, 10, -1},    // 25 (VIIm7b5sus2) - minor 2nd
+    {0, 2, 6, 10, -1},    // 22 (VIm7b5ob3sus2)
+    {0, 2, 6, 9, -1},     // 23 (#Vdim7sus2)
+    {0, 2, 7, -1, -1},    // 24 (IIIsus2)
+    {0, 2, 6, 10, -1},    // 25 (VIIm7b5sus2)
     {-1, -1, -1, -1, -1}, // 26 (blank)
-    {0, 1, 6, -1, -1},    // 27 (Idimob3sus2) - minor 2nd
+    {0, 2, 6, -1, -1},    // 27 (Idimob3sus2)
     {0, 2, 7, 10, -1},    // 28 (bVI7sus2)
     {0, 2, 7, 10, 14},    // 29 (bVII9sus2)
     {-1, -1, -1, -1, -1}, // 30 (blank)
     {0, 2, 7, -1, -1},    // 31 (Io5sus2)
     {0, 2, 7, 10, -1},    // 32 (IVm7sus2)
     {0, 2, 7, 10, -1},    // 33 (bII7sus2)
-    {0, 4, 6, -1, -1},      // 34 (It+6)
-    {0, 2, 4, 6, -1},       // 35 (Fr+6)
-    {0, 3, 4, 6, -1},       // 36 (Ger+6)
+    {0, 4, 6, -1, -1},    // 34 (It+6)
+    {0, 2, 4, 6, -1},     // 35 (Fr+6)
+    {0, 3, 4, 6, -1},     // 36 (Ger+6)
 };
 
 const int8_t chord_tones_sus4[][5] = {
     {0, -1, -1, -1, -1},  // 0 (blank)
-    {0, 5, 7, 11, -1},    // 1 (Isus4)
+    {0, 5, 7, 11, -1},    // 1 (Isus4) - root, perfect fourth, fifth, seventh
     {0, 5, 7, 11, -1},    // 2 (IIsus4)
     {0, 5, 7, 11, -1},    // 3 (IIIsus4)
     {0, 5, 7, 11, -1},    // 4 (IVsus4)
     {0, 5, 7, 11, -1},    // 5 (Vsus4)
     {0, 5, 7, 11, -1},    // 6 (VIsus4)
-    {0, 5, 7, 10, -1},    // 7 (VIIsus4)
+    {0, 5, 7, 10, -1},    // 7 (VIIsus4) - keeps diminished seventh
     {0, 5, 6, 10, -1},    // 8 (IIIm7b5sus4)
     {0, 5, 6, 9, -1},     // 9 (#Idim7sus4)
     {0, 5, 7, -1, -1},    // 10 (VIsus4)
@@ -235,9 +240,9 @@ const int8_t chord_tones_sus4[][5] = {
     {0, 5, 7, -1, -1},    // 31 (Io5sus4)
     {0, 5, 7, 10, -1},    // 32 (IVm7sus4)
     {0, 5, 7, 10, -1},    // 33 (bII7sus4)
-     {0, 4, 6, -1, -1},      // 34 (It+6)
-    {0, 2, 4, 6, -1},       // 35 (Fr+6)
-    {0, 3, 4, 6, -1},       // 36 (Ger+6)
+    {0, 4, 6, -1, -1},    // 34 (It+6)
+    {0, 2, 4, 6, -1},     // 35 (Fr+6)
+    {0, 3, 4, 6, -1},     // 36 (Ger+6)
 };
 
 const int8_t chord_root_offsets[] = {
@@ -821,34 +826,33 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
         struct ChordState *chord = &chord_states[chord_index];
 
         if (record->event.pressed) {
-            // Clear previous chord state
+            chord_button_held = true;
+            current_chord_keycode = keycode;
+            
+            // Clear previous chord state before playing new notes
             chord->note_count = 0;
 
             uint8_t row = record->event.key.row;
             uint8_t col = record->event.key.col;
             uint8_t chord_type = chord_grid[row][col];
             
-            // Calculate base MIDI note with octave transposition
-            // First, get the relative note value (60 is middle C / C3)
             uint8_t base_note = keycode - MI_Cs3 + 60;
-            
-            // Apply octave transposition
-            // Each octave is 12 semitones, and we subtract 3 because octave=3 is our "center" octave
             int16_t transposed_base = base_note + ((octave - 3) * 12);
             
-            // Ensure the note stays within MIDI note range (0-127)
             if (transposed_base < 0) transposed_base = 0;
             if (transposed_base > 127) transposed_base = 127;
-
-            // xprintf("chord_type %d: base_note %d, transposed %d\n", chord_type, base_note, transposed_base);
             
+            // Priority: sus4 takes precedence over sus2 if both are held
             const int8_t (*chord_tones_to_use)[5];
-            if (sus2_active) {
-                chord_tones_to_use = chord_tones_sus2;
-            } else if (sus4_active) {
+            if (sus4_active && sus4_button_held) {
                 chord_tones_to_use = chord_tones_sus4;
+                xprintf("Using sus4 chord tones\n");
+            } else if (sus2_active && sus2_button_held) {
+                chord_tones_to_use = chord_tones_sus2;
+                xprintf("Using sus2 chord tones\n");
             } else {
                 chord_tones_to_use = chord_tones;
+                xprintf("Using normal chord tones\n");
             }
 
             bool is_regular_chord = (chord_type >= 1 && chord_type <= 7);
@@ -856,52 +860,103 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
             for (int octave_offset = 0; octave_offset <= extra_octaves; octave_offset++) {
                 for (int i = 0; i < 5; i++) {
                     int8_t interval = chord_tones_to_use[chord_type][i];
+                    xprintf("Processing interval %d for chord type %d\n", interval, chord_type);
                     if (interval == -1) break;
                    
-                    // Calculate the final note with both transposition and chord intervals
                     int16_t note = transposed_base + interval + (octave_offset * 12);
                     
-                    // Ensure note stays within MIDI range
                     if (note < 0) note = 0;
                     if (note > 127) note = 127;
 
                     bool add_note = false;
                     if (is_regular_chord) {
-                        if (i == 0) add_note = true;  // Always add root
-                        else if (i == 1 && toggle_states[7]) add_note = true;  // 2nd note if TOGGLE_7 is on
-                        else if (i == 2 && toggle_states[8]) add_note = true;  // 3rd note if TOGGLE_8 is on
-                        else if (i == 3 && toggle_states[9]) add_note = true;  // 7th note if TOGGLE_9 is on
+                        if (i == 0) add_note = true;
+                        else if (i == 1 && toggle_states[7]) add_note = true;
+                        else if (i == 2 && toggle_states[8]) add_note = true;
+                        else if (i == 3 && toggle_states[9]) add_note = true;
                     } else {
                         add_note = true;
                     }
 
                     if (add_note && chord->note_count < MAX_NOTES_PER_CHORD) {
+                        xprintf("Adding note %d to chord\n", note);
                         chord->notes[chord->note_count++] = note;
-                        // xprintf("Adding note: %d\n", note);
                     }
                 }
             }
 
             // Send note-on for all notes in the chord
+            xprintf("Playing %d notes in chord\n", chord->note_count);
             for (int i = 0; i < chord->note_count; i++) {
                 midi_send_noteon(&midi_device, 0, chord->notes[i], 127);
             }
 
-            currently_held_chord = keycode;
             update_next_chords();
             update_next_chord_leds();
         } else {
-            // Send note-off for all notes in the chord
+            // When chord key is released, always turn off all notes
+            chord_button_held = false;
             for (int i = 0; i < chord->note_count; i++) {
                 midi_send_noteoff(&midi_device, 0, chord->notes[i], 0);
             }
-            // Clear chord state
             chord->note_count = 0;
-            currently_held_chord = 0;
+            current_chord_keycode = 0;
         }
         return false;
     }
     return true;
+}
+
+void find_keycode_position(uint16_t keycode, uint8_t *row, uint8_t *col) {
+    for (uint8_t r = 0; r < MATRIX_ROWS; r++) {
+        for (uint8_t c = 0; c < MATRIX_COLS; c++) {
+            if (pgm_read_word(&keymaps[0][r][c]) == keycode) {
+                *row = r;
+                *col = c;
+                return;
+            }
+        }
+    }
+    // If not found, set invalid values
+    *row = 0xFF;
+    *col = 0xFF;
+}
+
+void play_current_chord_variation(keyrecord_t *record) {
+    if (current_chord_keycode) {
+        // First, turn off currently playing notes
+        struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
+        for (int i = 0; i < current_chord->note_count; i++) {
+            midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
+        }
+        current_chord->note_count = 0;
+        
+        // Create a new event to simulate the key press
+        keyrecord_t temp_record = *record;
+        temp_record.event.pressed = true;
+
+        // Find the actual matrix position for the current chord keycode
+        uint8_t row, col;
+        find_keycode_position(current_chord_keycode, &row, &col);
+        
+        // Debug logging
+        xprintf("Playing variation for keycode %u at matrix pos row=%u col=%u\n", 
+                current_chord_keycode, row, col);
+
+        if (row != 0xFF && col != 0xFF) {
+            temp_record.event.key.row = row;
+            temp_record.event.key.col = col;
+            
+            // Debug: print chord type we're about to play
+            uint8_t chord_type = chord_grid[row][col];
+            xprintf("Found chord type %u at position\n", chord_type);
+            
+            // Then play the new variation
+            process_midi_messages(current_chord_keycode, &temp_record);
+        } else {
+            xprintf("ERROR: Could not find matrix position for keycode %u\n", current_chord_keycode);
+        }
+    }
 }
 
 
@@ -976,46 +1031,100 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             return false;
         case SUS2_ENABLE:
-            if (record->event.pressed) {
-                if (risky_mode) {
-                    sys_toggle_1 = !sys_toggle_1;
-                    update_next_chords();
-                    update_next_chord_leds();
-                } else {
-                    sus2_active = true;
-                    sus4_active = false;
-                    if (currently_held_chord) {
-                        process_midi_messages(currently_held_chord, record);
+    if (record->event.pressed) {
+        if (risky_mode) {
+            sys_toggle_1 = !sys_toggle_1;
+            update_next_chords();
+            update_next_chord_leds();
+        } else {
+            sus2_button_held = true;
+            // Only activate sus2 if sus4 isn't held (sus4 takes priority)
+            if (!sus4_button_held) {
+                if (chord_button_held) {
+                    // First, send note-off for all currently playing notes
+                    struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
+                    for (int i = 0; i < current_chord->note_count; i++) {
+                        midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
                     }
+                    current_chord->note_count = 0;
                 }
-            } else if (!risky_mode) {
-                sus2_active = false;
-                if (currently_held_chord) {
-                    process_midi_messages(currently_held_chord, record);
-                }
-            }
-            return false;
-
-        case SUS4_ENABLE:
-            if (record->event.pressed) {
-                if (risky_mode) {
-                    sys_toggle_2 = !sys_toggle_2;
-                    update_next_chords();
-                    update_next_chord_leds();
-                } else {
-                    sus4_active = true;
-                    sus2_active = false;
-                    if (currently_held_chord) {
-                        process_midi_messages(currently_held_chord, record);
-                    }
-                }
-            } else if (!risky_mode) {
+                sus2_active = true;
                 sus4_active = false;
-                if (currently_held_chord) {
-                    process_midi_messages(currently_held_chord, record);
+                play_current_chord_variation(record);
+            }
+        }
+    } else {  // Button released
+        if (!risky_mode) {
+            sus2_button_held = false;
+            sus2_active = false;
+            
+            if (chord_button_held) {  // Only play new variation if chord is still held
+                // First, send note-off for all currently playing notes
+                struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
+                for (int i = 0; i < current_chord->note_count; i++) {
+                    midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
+                }
+                current_chord->note_count = 0;
+                
+                if (sus4_button_held) {
+                    // If sus4 is held, switch to sus4 variation
+                    sus4_active = true;
+                    play_current_chord_variation(record);
+                } else {
+                    // Switch back to normal version
+                    play_current_chord_variation(record);
                 }
             }
-            return false;
+        }
+    }
+    return false;
+
+case SUS4_ENABLE:
+    if (record->event.pressed) {
+        if (risky_mode) {
+            sys_toggle_2 = !sys_toggle_2;
+            update_next_chords();
+            update_next_chord_leds();
+        } else {
+            sus4_button_held = true;
+            if (chord_button_held) {
+                // First, send note-off for all currently playing notes
+                struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
+                for (int i = 0; i < current_chord->note_count; i++) {
+                    midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
+                }
+                current_chord->note_count = 0;
+            }
+            // sus4 always takes priority over sus2
+            sus4_active = true;
+            sus2_active = false;
+            play_current_chord_variation(record);
+        }
+    } else {  // Button released
+        if (!risky_mode) {
+            sus4_button_held = false;
+            sus4_active = false;
+            
+            if (chord_button_held) {  // Only play new variation if chord is still held
+                // First, send note-off for all currently playing notes
+                struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
+                for (int i = 0; i < current_chord->note_count; i++) {
+                    midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
+                }
+                current_chord->note_count = 0;
+                
+                if (sus2_button_held) {
+                    // If sus2 is held, switch to sus2 variation
+                    sus2_active = true;
+                    play_current_chord_variation(record);
+                } else {
+                    // Switch back to normal version
+                    play_current_chord_variation(record);
+                }
+            }
+        }
+    }
+    return false;
         case KEY_CENTER_UP:
             if (record->event.pressed) {
                 setKeyLEDs((uint8_t)(key_signature+1));
