@@ -61,6 +61,11 @@ uint16_t currently_held_chord = 0;
 
 int8_t extra_octaves = 0;
 
+// System selection state variables
+uint8_t current_system = 0; // Will be determined by toggle states
+bool sys_toggle_1 = false;
+bool sys_toggle_2 = false;
+
 enum custom_keycodes {
     MIDI_CC_UP = SAFE_RANGE,
     MIDI_CC_DOWN,
@@ -110,7 +115,10 @@ const uint8_t IIIm7b5 = 8,
 		//sIVm7b5 = 30,
 		Io5 = 31,
 		IVm7 = 32,
-		bII7 = 33;
+		bII7 = 33,
+        It6 = 34,
+        Fr6 = 35,
+        Ger6 = 36;
 
 const int8_t chord_tones[][5] = {
     {0, -1, -1, -1, -1},  // 0 (blank)
@@ -147,6 +155,9 @@ const int8_t chord_tones[][5] = {
     {0, 7, -1, -1, -1},    // 31 (Io5)
     {0, 3, 7, 10, -1},     // 32 (IVm7)
     {0, 4, 7, 10, -1},     // 33 (bII7)
+    {0, 4, 6, -1, -1},      // 34 (It+6) - built on b6: root, major third, augmented fourth
+    {0, 2, 4, 6, -1},       // 35 (Fr+6) - built on b6: root, major second, major third, augmented fourth
+    {0, 3, 4, 6, -1},    // 36 (Ger+6) - built on b6: root, minor third, major third, augmented fourth
 };
 
 const int8_t chord_tones_sus2[][5] = {
@@ -184,6 +195,9 @@ const int8_t chord_tones_sus2[][5] = {
     {0, 2, 7, -1, -1},    // 31 (Io5sus2)
     {0, 2, 7, 10, -1},    // 32 (IVm7sus2)
     {0, 2, 7, 10, -1},    // 33 (bII7sus2)
+    {0, 4, 6, -1, -1},      // 34 (It+6)
+    {0, 2, 4, 6, -1},       // 35 (Fr+6)
+    {0, 3, 4, 6, -1},       // 36 (Ger+6)
 };
 
 const int8_t chord_tones_sus4[][5] = {
@@ -221,6 +235,9 @@ const int8_t chord_tones_sus4[][5] = {
     {0, 5, 7, -1, -1},    // 31 (Io5sus4)
     {0, 5, 7, 10, -1},    // 32 (IVm7sus4)
     {0, 5, 7, 10, -1},    // 33 (bII7sus4)
+     {0, 4, 6, -1, -1},      // 34 (It+6)
+    {0, 2, 4, 6, -1},       // 35 (Fr+6)
+    {0, 3, 4, 6, -1},       // 36 (Ger+6)
 };
 
 const int8_t chord_root_offsets[] = {
@@ -258,6 +275,9 @@ const int8_t chord_root_offsets[] = {
     0,   // 31 (Io5)
     5,   // 32 (IVm7)
     1,   // 33 (bII7)
+    8,   // 34 (It+6) - built on b6
+    8,   // 35 (Fr+6) - built on b6
+    8,   // 36 (Ger+6) - built on b6
 };
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -275,104 +295,208 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 		  , QK_BOOT, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS)
 };
 
-// uint8_t[][] nextChords = {//circles one
-// 		{}, 
-// 		{2,3,4,5,6,7},//1
-// 		{4, 5, 7},//2
-// 		{6, 5, 2, 4, 5},//3
-// 		{2, 5, 7},//4
-// 		{1, 7},//5
-// 		{3, 4, 2, 4, 5},//6
-// 		{1, 5}//7
-// }
-
-// uint8_t[][] nextChords2 = {//simple
-// 		{}, 
-// 		{2,3,4,5,6},//1
-// 		{3, 5},//2
-// 		{4, 6},//3
-// 		{2, 5},//4
-// 		{1, 6, 3},//5
-// 		{2, 4},//6
-// 		{}//7
-// }
-
-uint8_t nextChordsSafe[][7] = {
-	{},//0
-		{1,2,3,4,5,6},//1
-			{1, 3,5, IVm7, bII7, Io5},//2
-				{1,4,6},//3
-					{2,5,1, Io5},//4
-						{1, 3, 6},//5
-							{2, 4},//6
-								{},//7
-        {},//IIIm7b5 = 8
-		{},//sIdim7 = 9
-		{},//VI = 10,
-		{}, //sIVm7b5 = 11,
-		{},//		VII = 12,
-		{},//		sIIdim7 = 13,
-		{},//Vm = 14,
-		{},//I = 15,
-		{},//16,
-		{},//Im6 = 17,
-		{},//vo2 = 18,
-		{},//II = 19,
-		{},//bVI = 20,
-		{},//bVII = 21,
-		{},//VIm7b5ob3 = 22,
-		{},//sVdim7 = 23,
-		{},//III = 24,
-		{},//VIIm7b5 = 25,
-		{},// 26,
-		{},//Idimob3 = 27,
-		{},//bVI7 = 28,
-		{},//bVII9 = 29,
-		{},//{io5},//sIVm7b5 = 30,
-		{2, 3, 4, 5, 6},//io5 = 31,----------
-		{1},//IVm7 = 32,////////
-		{1}//bII7 = 33;////////////
-	
-};
-
-
-
-uint8_t nextChordsRisky[][7] = {
-	{},//0
-		{},//1
-		{},//2
-		{},//3
-		{},//4
-		{},//5
-		{},//6
-		{},//7
-		{VI, 4},//IIIm7b5 = 8
-		{2},//sIdim7 = 9
-		{2},//VI = 10,
-		{VII, Io5, 5}, //sIVm7b5 = 11,
-		{3},//		VII = 12,
-		{3},//		sIIdim7 = 13,
-		{I},//Vm = 14,
-		{4},//I = 15,
-		{},//16,
-		{II, vo2},//Im6 = 17,
-		{II},//vo2 = 18,
-		{5},//II = 19,
-		{bVII},//bVI = 20,
-		{1},//bVII = 21,
-		{II},//VIm7b5ob3 = 22,
-		{6},//sVdim7 = 23,
-		{6},//III = 24,
-		{III},//VIIm7b5 = 25,
-		{},// 26,
-		{2},//Idimob3 = 27,
-		{Io5},//bVI7 = 28,
-		{Io5},//bVII9 = 29,
-		{5},//{io5},//sIVm7b5 = 30,
-		{2, 3, 4, 5, 6},//io5 = 31,
-		{1},//IVm7 = 32,
-		{1}//bII7 = 33;
-		
+// [system_index][safe_or_risky][chord_index][next_chord_slots]
+uint8_t nextChords[4][2][37][8] = {
+    { // System 0 (Original system)
+        { // Safe chords [0][0]
+            {}, // 0
+            {1,2,3,4,5,6}, // 1
+            {1, 3,5, 32, 33, 31}, // 2
+            {1,4,6}, // 3
+            {2,5,1, 31}, // 4
+            {1, 3, 6}, // 5
+            {2, 4}, // 6
+            {}, // 7
+            {}, // 8 (IIIm7b5)
+            {}, // 9 (#Idim7)
+            {}, // 10 (VI)
+            {}, // 11 (#IVm7b5)
+            {}, // 12 (VII)
+            {}, // 13 (#IIdim7)
+            {}, // 14 (Vm)
+            {}, // 15 (I)
+            {}, // 16
+            {}, // 17 (Im6)
+            {}, // 18 (vo2)
+            {}, // 19 (II)
+            {}, // 20 (bVI)
+            {}, // 21 (bVII)
+            {}, // 22 (VIm7b5ob3)
+            {}, // 23 (#Vdim7)
+            {}, // 24 (III)
+            {}, // 25 (VIIm7b5)
+            {}, // 26
+            {}, // 27 (Idimob3)
+            {}, // 28 (bVI7)
+            {}, // 29 (bVII9)
+            {}, // 30
+            {2, 3, 4, 5, 6}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        },
+        { // Risky chords [0][1]
+            {}, // 0
+            {}, // 1
+            {}, // 2
+            {}, // 3
+            {}, // 4
+            {}, // 5
+            {}, // 6
+            {}, // 7
+            {10, 4}, // 8 (IIIm7b5)
+            {2}, // 9 (#Idim7)
+            {2}, // 10 (VI)
+            {12, 31, 5}, // 11 (#IVm7b5)
+            {3}, // 12 (VII)
+            {3}, // 13 (#IIdim7)
+            {15}, // 14 (Vm)
+            {4}, // 15 (I)
+            {}, // 16
+            {19, 18}, // 17 (Im6)
+            {19}, // 18 (vo2)
+            {5}, // 19 (II)
+            {21}, // 20 (bVI)
+            {1}, // 21 (bVII)
+            {19}, // 22 (VIm7b5ob3)
+            {6}, // 23 (#Vdim7)
+            {6}, // 24 (III)
+            {24}, // 25 (VIIm7b5)
+            {}, // 26
+            {2}, // 27 (Idimob3)
+            {31}, // 28 (bVI7)
+            {31}, // 29 (bVII9)
+            {}, // 30
+            {2, 3, 4, 5, 6}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        }
+    },
+    { // System 1 https://chordprogressionblog.wordpress.com/2016/10/11/music-theory-the-chord-progression/
+        { // Safe chords [1][0]
+            {}, // 0
+            {1,2,3,4,5,6,7}, // 1
+            {3,5}, // 2
+            {4,6,2}, // 3
+            {1,3,5}, // 4
+            {1, 6}, // 5
+            {2, 4}, // 6
+            {1, 6}, // 7
+            {}, // 8 (IIIm7b5)
+            {}, // 9 (#Idim7)
+            {}, // 10 (VI)
+            {}, // 11 (#IVm7b5)
+            {}, // 12 (VII)
+            {}, // 13 (#IIdim7)
+            {}, // 14 (Vm)
+            {}, // 15 (I)
+            {}, // 16
+            {}, // 17 (Im6)
+            {}, // 18 (vo2)
+            {}, // 19 (II)
+            {}, // 20 (bVI)
+            {}, // 21 (bVII)
+            {}, // 22 (VIm7b5ob3)
+            {}, // 23 (#Vdim7)
+            {}, // 24 (III)
+            {}, // 25 (VIIm7b5)
+            {}, // 26
+            {}, // 27 (Idimob3)
+            {}, // 28 (bVI7)
+            {}, // 29 (bVII9)
+            {}, // 30
+            {2, 3, 4, 5, 6}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        },
+        { // Risky chords [1][1]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        }
+    },
+    { // System 2 https://www.reddit.com/r/musictheory/comments/3xmc1w/chord_progression_guideline_chart/
+        { // Safe chords [2][0]
+            {}, // 0
+            {1,2,3,4,5,6, 7}, // 1
+            {4, 5, 7}, // 2
+            {6, 2, 4, 5, 7}, // 3
+            {5, 2, 5, 7}, // 4
+            {1, 6, 7}, // 5
+            {3, 2, 4, 5}, // 6
+            {5, 1, 6}, // 7
+            {}, // 8 (IIIm7b5)
+            {}, // 9 (#Idim7)
+            {}, // 10 (VI)
+            {}, // 11 (#IVm7b5)
+            {}, // 12 (VII)
+            {}, // 13 (#IIdim7)
+            {}, // 14 (Vm)
+            {}, // 15 (I)
+            {}, // 16
+            {}, // 17 (Im6)
+            {}, // 18 (vo2)
+            {}, // 19 (II)
+            {}, // 20 (bVI)
+            {}, // 21 (bVII)
+            {}, // 22 (VIm7b5ob3)
+            {}, // 23 (#Vdim7)
+            {}, // 24 (III)
+            {}, // 25 (VIIm7b5)
+            {}, // 26
+            {}, // 27 (Idimob3)
+            {}, // 28 (bVI7)
+            {}, // 29 (bVII9)
+            {}, // 30
+            {2, 3, 4, 5, 6}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        },
+        { // Risky chords [2][1]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        }
+    },
+    { // System 3 https://hyperbits.com/best-chord-progression-charts/ first
+        { // Safe chords [3][0]
+            {}, // 0
+            {1, 2, 3, 4, 5, 6}, // 1
+            {2, 3, 5}, // 2
+            {3, 4, 6}, // 3
+            {4, 2, 5}, // 4
+            {5, 3, 6, 1}, // 5
+            {6, 4}, // 6
+            {}, // 7
+            {}, // 8 (IIIm7b5)
+            {}, // 9 (#Idim7)
+            {}, // 10 (VI)
+            {}, // 11 (#IVm7b5)
+            {}, // 12 (VII)
+            {}, // 13 (#IIdim7)
+            {}, // 14 (Vm)
+            {}, // 15 (I)
+            {}, // 16
+            {}, // 17 (Im6)
+            {}, // 18 (vo2)
+            {}, // 19 (II)
+            {}, // 20 (bVI)
+            {}, // 21 (bVII)
+            {}, // 22 (VIm7b5ob3)
+            {}, // 23 (#Vdim7)
+            {}, // 24 (III)
+            {}, // 25 (VIIm7b5)
+            {}, // 26
+            {}, // 27 (Idimob3)
+            {}, // 28 (bVI7)
+            {}, // 29 (bVII9)
+            {}, // 30
+            {}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        },
+        { // Risky chords [3][1]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        }
+    }
 };
 
 
@@ -471,20 +595,23 @@ void set_xy_led(uint8_t x, uint8_t y, uint8_t color_index) {
 }
 
 void update_next_chords(void) {
-    const uint8_t (*next_chords)[7];
+    const uint8_t (*next_chords)[8];
     uint8_t num_next_chords;
     bool show_all_risky = false;
 
+    // Calculate current_system from toggle states
+    current_system = (sys_toggle_1 ? 1 : 0) | (sys_toggle_2 ? 2 : 0);
+
     if (risky_chord_played) {
-        next_chords = nextChordsRisky;
-        num_next_chords = sizeof(nextChordsRisky[0]) / sizeof(nextChordsRisky[0][0]);
+        next_chords = &nextChords[current_system][1][0];
+        num_next_chords = 8;
     } else if (risky_mode) {
         show_all_risky = true;
-        next_chords = nextChordsRisky;
-        num_next_chords = sizeof(nextChordsRisky) / sizeof(nextChordsRisky[0]);
+        next_chords = &nextChords[current_system][1][0];
+        num_next_chords = sizeof(nextChords[0][1]) / sizeof(nextChords[0][1][0]);
     } else {
-        next_chords = nextChordsSafe;
-        num_next_chords = sizeof(nextChordsSafe) / sizeof(nextChordsSafe[0]);
+        next_chords = &nextChords[current_system][0][0];
+        num_next_chords = sizeof(nextChords[0][0]) / sizeof(nextChords[0][0][0]);
     }
 
     // Clear the chord grid
@@ -495,6 +622,15 @@ void update_next_chords(void) {
     for (int y = 0; y < MATRIX_ROWS; y++) {
         for (int x = 2; x < MATRIX_COLS; x++) {
             uint8_t adjusted_note = relativeNotes[y][x];
+            
+            // First check if this note corresponds to the current chord
+            if (last_chord_index > 0) {
+                int8_t current_root_offset = chord_root_offsets[last_chord_index];
+                if (current_root_offset != -1 && adjusted_note == current_root_offset) {
+                    chord_grid[y][x] = last_chord_index;
+                    continue;  // Skip checking other chords for this position
+                }
+            }
             
             if (show_all_risky) {
                 for (uint8_t chord_index = 8; chord_index < sizeof(chord_root_offsets); chord_index++) {
@@ -507,7 +643,6 @@ void update_next_chords(void) {
             } else {
                 for (int i = 0; i < num_next_chords; i++) {
                     uint8_t next_chord_index = next_chords[last_chord_index][i];
-                    //xprintf("Set chord %d at (%d, %d)\n", next_chord_index, x, y);
                     if (next_chord_index == 0) break;  // End of available chords
                     
                     int8_t root_offset = chord_root_offsets[next_chord_index];
@@ -581,6 +716,8 @@ void update_next_chord_leds(void) {
         } else if (extra_octaves > 0) {
             set_xy_led(0, 3, extraOctColor);
         }
+        set_xy_led(0, 1, sys_toggle_1 ? COLOR_KEY_CENTER_VALID : COLOR_KEY_CENTER);
+        set_xy_led(0, 2, sys_toggle_2 ? COLOR_KEY_CENTER_VALID : COLOR_KEY_CENTER);
     } else {
         // Display normal octave when risky mode is not active
         if (colorIndex < 0) {
@@ -840,26 +977,39 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         case SUS2_ENABLE:
             if (record->event.pressed) {
-                sus2_active = true;
-                sus4_active = false;
-                if (currently_held_chord) {
-                    process_midi_messages(currently_held_chord, record);
+                if (risky_mode) {
+                    sys_toggle_1 = !sys_toggle_1;
+                    update_next_chords();
+                    update_next_chord_leds();
+                } else {
+                    sus2_active = true;
+                    sus4_active = false;
+                    if (currently_held_chord) {
+                        process_midi_messages(currently_held_chord, record);
+                    }
                 }
-            } else {
+            } else if (!risky_mode) {
                 sus2_active = false;
                 if (currently_held_chord) {
                     process_midi_messages(currently_held_chord, record);
                 }
             }
             return false;
+
         case SUS4_ENABLE:
             if (record->event.pressed) {
-                sus4_active = true;
-                sus2_active = false;
-                if (currently_held_chord) {
-                    process_midi_messages(currently_held_chord, record);
+                if (risky_mode) {
+                    sys_toggle_2 = !sys_toggle_2;
+                    update_next_chords();
+                    update_next_chord_leds();
+                } else {
+                    sus4_active = true;
+                    sus2_active = false;
+                    if (currently_held_chord) {
+                        process_midi_messages(currently_held_chord, record);
+                    }
                 }
-            } else {
+            } else if (!risky_mode) {
                 sus4_active = false;
                 if (currently_held_chord) {
                     process_midi_messages(currently_held_chord, record);
