@@ -386,7 +386,7 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 
 // Define colors as 3-element arrays
-#define IN_SCALE    {100, 0,   0}
+#define IN_SCALE    {0, 255,   100}
 #define NOT_IN_SCALE  {0,   0, 0}
 #define CURRENTLY_PLAYED   {0,   0,   255}
 #define FEEDBACK_PLAYED  {255, 255, 255}
@@ -599,7 +599,7 @@ void update_next_chord_leds(void) {
 
 void setKeyLEDs(int8_t keySignature) {
     key_signature = (keySignature + 12) % 12;
-    xprintf("Setting key signature to: %d\n", key_signature);
+    // xprintf("Setting key signature to: %d\n", key_signature);
     
     for (int y = 0; y < MATRIX_ROWS; y++) {
         for (int x = 2; x < MATRIX_COLS; x++) {
@@ -616,8 +616,8 @@ void setKeyLEDs(int8_t keySignature) {
             
             relativeNotes[y][x] = adjusted_note;
             
-            xprintf("Key at (%d, %d): keycode %d, note_value %d, adjusted %d\n", 
-                    x, y, keycode, note_value, adjusted_note);
+            // xprintf("Key at (%d, %d): keycode %d, note_value %d, adjusted %d\n", 
+            //         x, y, keycode, note_value, adjusted_note);
         }
     }
     update_next_chords();
@@ -631,7 +631,7 @@ void midi_receive_cc(MidiDevice* device, uint16_t cnt, uint8_t byte0, uint8_t by
     // Handle MIDI message here
     // byte0 is typically the status byte (includes channel and message type)
     // byte1 and byte2 depend on the message type
-    xprintf("midi msg: %d %d %d", byte0, byte1, byte2);
+    // xprintf("midi msg: %d %d %d", byte0, byte1, byte2);
     // uint8_t channel = byte0 & 0x0F;
     uint8_t type = byte0 & 0xF0;
 
@@ -648,11 +648,11 @@ void midi_receive_cc(MidiDevice* device, uint16_t cnt, uint8_t byte0, uint8_t by
 
 void matrix_init_user(void) {
     initted = true;
-    dprint("keyboard_post_init_user\n");
-    dprint("matrix_init_user start\n");
+    // dprint("keyboard_post_init_user\n");
+    // dprint("matrix_init_user start\n");
     midi_device_init(&midi_device);
     rgb_matrix_enable();
-    xprintf("RGB Matrix initialized\n");
+    // xprintf("RGB Matrix initialized\n");
     setKeyLEDs(key_signature);
     // rgb_matrix_set_color_all(0, 0, 0);  // Turn off all LEDs
 }
@@ -660,7 +660,7 @@ void matrix_init_user(void) {
 void keyboard_pre_init_user(void) {
     debug_enable=true;
     debug_matrix=true;
-    dprint("keyboard_pre_init_user\n");
+    // dprint("keyboard_pre_init_user\n");
 }
 
 void keyboard_post_init_user(void) {
@@ -690,10 +690,21 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
             uint8_t row = record->event.key.row;
             uint8_t col = record->event.key.col;
             uint8_t chord_type = chord_grid[row][col];
+            
+            // Calculate base MIDI note with octave transposition
+            // First, get the relative note value (60 is middle C / C3)
             uint8_t base_note = keycode - MI_Cs3 + 60;
+            
+            // Apply octave transposition
+            // Each octave is 12 semitones, and we subtract 3 because octave=3 is our "center" octave
+            int16_t transposed_base = base_note + ((octave - 3) * 12);
+            
+            // Ensure the note stays within MIDI note range (0-127)
+            if (transposed_base < 0) transposed_base = 0;
+            if (transposed_base > 127) transposed_base = 127;
 
-            xprintf("chord_type %d: %d\n", chord_type, base_note);
-            xprintf("chord_type  from %d: %d\n", row, col);
+            // xprintf("chord_type %d: base_note %d, transposed %d\n", chord_type, base_note, transposed_base);
+            
             const int8_t (*chord_tones_to_use)[5];
             if (sus2_active) {
                 chord_tones_to_use = chord_tones_sus2;
@@ -708,23 +719,28 @@ bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
             for (int octave_offset = 0; octave_offset <= extra_octaves; octave_offset++) {
                 for (int i = 0; i < 5; i++) {
                     int8_t interval = chord_tones_to_use[chord_type][i];
-                    xprintf("Interval %d: %d\n", i, interval);
                     if (interval == -1) break;
                    
-                    uint8_t note = base_note + interval + (octave_offset * 12);
+                    // Calculate the final note with both transposition and chord intervals
+                    int16_t note = transposed_base + interval + (octave_offset * 12);
+                    
+                    // Ensure note stays within MIDI range
+                    if (note < 0) note = 0;
+                    if (note > 127) note = 127;
 
                     bool add_note = false;
                     if (is_regular_chord) {
                         if (i == 0) add_note = true;  // Always add root
-                        else if (i == 1 && toggle_states[7]) add_note = true;  // 2nd note if TOGGLE_6 is on
-                        else if (i == 2 && toggle_states[8]) add_note = true;  // 3rd note if TOGGLE_7 is on
-                        else if (i == 3 && toggle_states[9]) add_note = true;  // 7th note if TOGGLE_8 is on
+                        else if (i == 1 && toggle_states[7]) add_note = true;  // 2nd note if TOGGLE_7 is on
+                        else if (i == 2 && toggle_states[8]) add_note = true;  // 3rd note if TOGGLE_8 is on
+                        else if (i == 3 && toggle_states[9]) add_note = true;  // 7th note if TOGGLE_9 is on
                     } else {
                         add_note = true;
                     }
 
                     if (add_note && chord->note_count < MAX_NOTES_PER_CHORD) {
                         chord->notes[chord->note_count++] = note;
+                        // xprintf("Adding note: %d\n", note);
                     }
                 }
             }
