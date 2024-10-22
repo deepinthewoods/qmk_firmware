@@ -386,7 +386,7 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 
 // Define colors as 3-element arrays
-#define IN_SCALE    {255, 0,   0}
+#define IN_SCALE    {100, 0,   0}
 #define NOT_IN_SCALE  {0,   0, 0}
 #define CURRENTLY_PLAYED   {0,   0,   255}
 #define FEEDBACK_PLAYED  {255, 255, 255}
@@ -532,28 +532,38 @@ void update_next_chords(void) {
 void update_next_chord_leds(void) {
     uint8_t chord_color = (risky_mode || risky_chord_played) ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE;
     rgb_matrix_set_color_all(0, 0, 0);
-    // Set LEDs based on chord_grid
+    
+    // Set LEDs based on chord_grid and scale
     for (int y = 0; y < MATRIX_ROWS; y++) {
         for (int x = 2; x < MATRIX_COLS; x++) {
             uint8_t adjusted_note = relativeNotes[y][x];
             uint8_t chord_index = chord_grid[y][x];
+            bool note_handled = false;
 
+            // First priority: Chord roots
             if (chord_index != 0) {
                 set_xy_led(x, y, chord_color);
+                note_handled = true;
             }
 
-            // Highlight the key center
+            // Second priority: Key center
             if (adjusted_note == 0) {
                 if (chord_index != 0) {
                     set_xy_led(x, y, COLOR_KEY_CENTER_VALID);
                 } else {
                     set_xy_led(x, y, COLOR_KEY_CENTER);
                 }
+                note_handled = true;
+            }
+
+            // Third priority: Scale notes that aren't already highlighted
+            if (!note_handled && is_in_scale(adjusted_note)) {
+                set_xy_led(x, y, COLOR_IN_SCALE);
             }
         }
     }
 
-    // Update toggle button LEDs
+    // Rest of the toggle and octave LED updates remain the same
     set_xy_led(0, 0, toggle_states[0] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
     set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
     set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
@@ -561,8 +571,8 @@ void update_next_chord_leds(void) {
     // Set octave and extra octaves colors
     int8_t colorIndex = octave - 3;
     int8_t extraOctaveIndex = extra_octaves;
-    uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) -1;
-    uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) -1;
+    uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) - 1;
+    uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) - 1;
 
     if (risky_mode) {
         // Display extra octaves when risky mode is active
