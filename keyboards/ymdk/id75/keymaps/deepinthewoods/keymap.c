@@ -305,12 +305,12 @@ uint8_t nextChords[4][2][37][8] = {
     { // System 0 (Original system)
         { // Safe chords [0][0]
             {}, // 0
-            {1,2,3,4,5,6}, // 1
+            {2,3,4,5,6}, // 1
             {1, 3,5, 32, 33, 31}, // 2
             {1,4,6}, // 3
             {2,5,1, 31}, // 4
             {1, 3, 6}, // 5
-            {2, 4}, // 6
+            {2, 4, 1}, // 6
             {}, // 7
             {}, // 8 (IIIm7b5)
             {}, // 9 (#Idim7)
@@ -380,11 +380,11 @@ uint8_t nextChords[4][2][37][8] = {
         { // Safe chords [1][0]
             {}, // 0
             {1,2,3,4,5,6,7}, // 1
-            {3,5}, // 2
-            {4,6,2}, // 3
+            {3,5, 1}, // 2
+            {4,6,2, 1}, // 3
             {1,3,5}, // 4
             {1, 6}, // 5
-            {2, 4}, // 6
+            {2, 4, 1}, // 6
             {1, 6}, // 7
             {}, // 8 (IIIm7b5)
             {}, // 9 (#Idim7)
@@ -422,11 +422,11 @@ uint8_t nextChords[4][2][37][8] = {
         { // Safe chords [2][0]
             {}, // 0
             {1,2,3,4,5,6, 7}, // 1
-            {4, 5, 7}, // 2
-            {6, 2, 4, 5, 7}, // 3
-            {5, 2, 5, 7}, // 4
+            {4, 5, 7, 1}, // 2
+            {6, 2, 4, 5, 7, 1}, // 3
+            {5, 2, 5, 7, 1}, // 4
             {1, 6, 7}, // 5
-            {3, 2, 4, 5}, // 6
+            {3, 2, 4, 5, 1}, // 6
             {5, 1, 6}, // 7
             {}, // 8 (IIIm7b5)
             {}, // 9 (#Idim7)
@@ -464,11 +464,11 @@ uint8_t nextChords[4][2][37][8] = {
         { // Safe chords [3][0]
             {}, // 0
             {1, 2, 3, 4, 5, 6}, // 1
-            {2, 3, 5}, // 2
-            {3, 4, 6}, // 3
-            {4, 2, 5}, // 4
-            {5, 3, 6, 1}, // 5
-            {6, 4}, // 6
+            {2, 3, 5, 1}, // 2
+            {3, 4, 6, 1}, // 3
+            {4, 2, 5, 1}, // 4
+            {1, 5, 3, 6, 1}, // 5
+            {6, 4, 1}, // 6
             {}, // 7
             {}, // 8 (IIIm7b5)
             {}, // 9 (#Idim7)
@@ -515,16 +515,16 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 
 // Define colors as 3-element arrays
-#define IN_SCALE    {0, 255,   100}
+#define IN_SCALE    {0, 0,   255}
 #define NOT_IN_SCALE  {0,   0, 0}
 #define CURRENTLY_PLAYED   {0,   0,   255}
 #define FEEDBACK_PLAYED  {255, 255, 255}
 #define CHORD_GREEN  {0,   255,   0}
-#define CHORD_BLUE {0, 0, 255}
+#define CHORD_BLUE {0, 255, 100}
 #define KEY_CENTER {255, 100, 0}
 #define TOGGLE_ON {100, 100, 100}
 #define TOGGLE_OFF {0, 0, 0}
-#define KEY_CENTER_VALID {255, 0, 255}
+#define KEY_CENTER_VALID {255, 0, 0}
 #define OCTAVE_COLOR_0 {255, 0, 0}    // Bright Red
 #define OCTAVE_COLOR_1 {255, 100, 0}    // Bright orange
 #define OCTAVE_COLOR_2 {255, 255, 0}  // Bright Yellow
@@ -764,6 +764,7 @@ void setKeyLEDs(int8_t keySignature) {
     }
     update_next_chords();
     update_next_chord_leds();
+   // uint8_t scaled_key_value = ((key_signature + 2) % 12) * 127 / 11;
     midi_send_cc(&midi_device, 0, MIDI_CC_KEY, key_signature);
 
 }
@@ -820,91 +821,12 @@ struct ChordState {
 
 struct ChordState chord_states[NUM_MIDI_KEYS];
 
-bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
-    if (keycode >= MI_B1 && keycode <= MI_G4) {
-        uint8_t chord_index = keycode - MI_B1;
-        struct ChordState *chord = &chord_states[chord_index];
-
-        if (record->event.pressed) {
-            chord_button_held = true;
-            current_chord_keycode = keycode;
-            
-            // Clear previous chord state before playing new notes
-            chord->note_count = 0;
-
-            uint8_t row = record->event.key.row;
-            uint8_t col = record->event.key.col;
-            uint8_t chord_type = chord_grid[row][col];
-            
-            uint8_t base_note = keycode - MI_Cs3 + 60;
-            int16_t transposed_base = base_note + ((octave - 3) * 12);
-            
-            if (transposed_base < 0) transposed_base = 0;
-            if (transposed_base > 127) transposed_base = 127;
-            
-            // Priority: sus4 takes precedence over sus2 if both are held
-            const int8_t (*chord_tones_to_use)[5];
-            if (sus4_active && sus4_button_held) {
-                chord_tones_to_use = chord_tones_sus4;
-                xprintf("Using sus4 chord tones\n");
-            } else if (sus2_active && sus2_button_held) {
-                chord_tones_to_use = chord_tones_sus2;
-                xprintf("Using sus2 chord tones\n");
-            } else {
-                chord_tones_to_use = chord_tones;
-                xprintf("Using normal chord tones\n");
-            }
-
-            bool is_regular_chord = (chord_type >= 1 && chord_type <= 7);
-
-            for (int octave_offset = 0; octave_offset <= extra_octaves; octave_offset++) {
-                for (int i = 0; i < 5; i++) {
-                    int8_t interval = chord_tones_to_use[chord_type][i];
-                    xprintf("Processing interval %d for chord type %d\n", interval, chord_type);
-                    if (interval == -1) break;
-                   
-                    int16_t note = transposed_base + interval + (octave_offset * 12);
-                    
-                    if (note < 0) note = 0;
-                    if (note > 127) note = 127;
-
-                    bool add_note = false;
-                    if (is_regular_chord) {
-                        if (i == 0) add_note = true;
-                        else if (i == 1 && toggle_states[7]) add_note = true;
-                        else if (i == 2 && toggle_states[8]) add_note = true;
-                        else if (i == 3 && toggle_states[9]) add_note = true;
-                    } else {
-                        add_note = true;
-                    }
-
-                    if (add_note && chord->note_count < MAX_NOTES_PER_CHORD) {
-                        xprintf("Adding note %d to chord\n", note);
-                        chord->notes[chord->note_count++] = note;
-                    }
-                }
-            }
-
-            // Send note-on for all notes in the chord
-            xprintf("Playing %d notes in chord\n", chord->note_count);
-            for (int i = 0; i < chord->note_count; i++) {
-                midi_send_noteon(&midi_device, 0, chord->notes[i], 127);
-            }
-
-            update_next_chords();
-            update_next_chord_leds();
-        } else {
-            // When chord key is released, always turn off all notes
-            chord_button_held = false;
-            for (int i = 0; i < chord->note_count; i++) {
-                midi_send_noteoff(&midi_device, 0, chord->notes[i], 0);
-            }
-            chord->note_count = 0;
-            current_chord_keycode = 0;
-        }
-        return false;
+// Add this helper function to compare note arrays
+bool contains_note(const uint8_t* notes, uint8_t note_count, uint8_t note) {
+    for (int i = 0; i < note_count; i++) {
+        if (notes[i] == note) return true;
     }
-    return true;
+    return false;
 }
 
 void find_keycode_position(uint16_t keycode, uint8_t *row, uint8_t *col) {
@@ -922,42 +844,133 @@ void find_keycode_position(uint16_t keycode, uint8_t *row, uint8_t *col) {
     *col = 0xFF;
 }
 
+// Add this function to calculate the new chord state without playing notes
+void calculate_chord_state(uint16_t keycode, uint8_t row, uint8_t col, struct ChordState* new_state) {
+    new_state->note_count = 0;
+    
+    uint8_t chord_type = chord_grid[row][col];
+    uint8_t base_note = keycode - MI_Cs3 + 60;
+    int16_t transposed_base = base_note + ((octave - 3) * 12);
+    
+    if (transposed_base < 0) transposed_base = 0;
+    if (transposed_base > 127) transposed_base = 127;
+    
+    const int8_t (*chord_tones_to_use)[5];
+    if (sus4_active && sus4_button_held) {
+        chord_tones_to_use = chord_tones_sus4;
+    } else if (sus2_active && sus2_button_held) {
+        chord_tones_to_use = chord_tones_sus2;
+    } else {
+        chord_tones_to_use = chord_tones;
+    }
+
+    bool is_regular_chord = (chord_type >= 1 && chord_type <= 7);
+
+    for (int octave_offset = 0; octave_offset <= extra_octaves; octave_offset++) {
+        for (int i = 0; i < 5; i++) {
+            int8_t interval = chord_tones_to_use[chord_type][i];
+            if (interval == -1) break;
+           
+            int16_t note = transposed_base + interval + (octave_offset * 12);
+            
+            if (note < 0) note = 0;
+            if (note > 127) note = 127;
+
+            bool add_note = false;
+            if (is_regular_chord) {
+                if (i == 0) add_note = true;
+                else if (i == 1 && toggle_states[7]) add_note = true;
+                else if (i == 2 && toggle_states[8]) add_note = true;
+                else if (i == 3 && toggle_states[9]) add_note = true;
+            } else {
+                add_note = true;
+            }
+
+            if (add_note && new_state->note_count < MAX_NOTES_PER_CHORD) {
+                new_state->notes[new_state->note_count++] = note;
+            }
+        }
+    }
+}
+
+// Modified play_current_chord_variation function
 void play_current_chord_variation(keyrecord_t *record) {
     if (current_chord_keycode) {
-        // First, turn off currently playing notes
         struct ChordState *current_chord = &chord_states[current_chord_keycode - MI_B1];
-        for (int i = 0; i < current_chord->note_count; i++) {
-            midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
-        }
-        current_chord->note_count = 0;
+        struct ChordState new_chord_state = {0};
         
-        // Create a new event to simulate the key press
-        keyrecord_t temp_record = *record;
-        temp_record.event.pressed = true;
-
         // Find the actual matrix position for the current chord keycode
         uint8_t row, col;
         find_keycode_position(current_chord_keycode, &row, &col);
         
-        // Debug logging
-        xprintf("Playing variation for keycode %u at matrix pos row=%u col=%u\n", 
-                current_chord_keycode, row, col);
-
         if (row != 0xFF && col != 0xFF) {
-            temp_record.event.key.row = row;
-            temp_record.event.key.col = col;
+            // Calculate the new chord state
+            calculate_chord_state(current_chord_keycode, row, col, &new_chord_state);
             
-            // Debug: print chord type we're about to play
-            uint8_t chord_type = chord_grid[row][col];
-            xprintf("Found chord type %u at position\n", chord_type);
+            // Compare and only send necessary MIDI messages
+            // First, note-offs for notes that aren't in the new chord
+            for (int i = 0; i < current_chord->note_count; i++) {
+                if (!contains_note(new_chord_state.notes, new_chord_state.note_count, current_chord->notes[i])) {
+                    midi_send_noteoff(&midi_device, 0, current_chord->notes[i], 0);
+                }
+            }
             
-            // Then play the new variation
-            process_midi_messages(current_chord_keycode, &temp_record);
-        } else {
-            xprintf("ERROR: Could not find matrix position for keycode %u\n", current_chord_keycode);
+            // Then, note-ons for new notes that weren't in the old chord
+            for (int i = 0; i < new_chord_state.note_count; i++) {
+                if (!contains_note(current_chord->notes, current_chord->note_count, new_chord_state.notes[i])) {
+                    midi_send_noteon(&midi_device, 0, new_chord_state.notes[i], 127);
+                }
+            }
+            
+            // Update the current chord state
+            *current_chord = new_chord_state;
         }
     }
 }
+
+// Modified process_midi_messages function
+bool process_midi_messages(uint16_t keycode, keyrecord_t *record) {
+    if (keycode >= MI_B1 && keycode <= MI_G4) {
+        uint8_t chord_index = keycode - MI_B1;
+        struct ChordState *chord = &chord_states[chord_index];
+
+        if (record->event.pressed) {
+            chord_button_held = true;
+            current_chord_keycode = keycode;
+            
+            uint8_t row = record->event.key.row;
+            uint8_t col = record->event.key.col;
+            
+            // Calculate new chord state and play it
+            struct ChordState new_chord_state = {0};
+            calculate_chord_state(keycode, row, col, &new_chord_state);
+            
+            // Send note-on for all notes in the new chord
+            for (int i = 0; i < new_chord_state.note_count; i++) {
+                midi_send_noteon(&midi_device, 0, new_chord_state.notes[i], 127);
+            }
+            
+            *chord = new_chord_state;
+            
+            update_next_chords();
+            update_next_chord_leds();
+        } else {
+            // When chord key is released, turn off all notes
+            chord_button_held = false;
+            for (int i = 0; i < chord->note_count; i++) {
+                midi_send_noteoff(&midi_device, 0, chord->notes[i], 0);
+            }
+            chord->note_count = 0;
+            current_chord_keycode = 0;
+        }
+        return false;
+    }
+    return true;
+}
+
+
+
+
 
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
@@ -969,7 +982,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             uint8_t x = record->event.key.col;
             uint8_t chord_index = chord_grid[y][x];
             
-            if (chord_index != 0) {  // If a valid chord index is found
+            if (chord_index != 0) { // If a valid chord index is found or the I chord is played
                 last_chord_index = chord_index;
                 
                 // Check if this is a risky chord
