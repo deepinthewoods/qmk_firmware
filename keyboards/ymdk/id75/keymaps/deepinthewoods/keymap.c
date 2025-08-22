@@ -1119,7 +1119,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     if (record->event.pressed) {
         if (risky_mode) {
             // System down (decrease current_system)
-            current_system = (current_system == 0) ? 5 : current_system - 1;
+            if (current_system > 0) {
+                current_system--;
+            }
             update_next_chords();
             update_next_chord_leds();
         } else {
@@ -1168,8 +1170,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 case SUS4_ENABLE:
     if (record->event.pressed) {
         if (risky_mode) {
-            // System up (increase current_system)  
-            current_system = (current_system == 5) ? 0 : current_system + 1;
+            // System up (increase current_system)
+            if (current_system < 5) {
+                current_system++;
+            }
             update_next_chords();
             update_next_chord_leds();
         } else {
