@@ -25,6 +25,10 @@
 #define MIDI_CC_TOGGLE_8 27
 #define MIDI_CC_TOGGLE_9 28
 #define MIDI_CC_TOGGLE_10 29
+#define MIDI_CC_RANDOM_0_UP 111
+#define MIDI_CC_RANDOM_1_UP 112
+#define MIDI_CC_RANDOM_0_DOWN 113
+#define MIDI_CC_RANDOM_1_DOWN 114
 
 
 #define MIDI_CC_KEY 101
@@ -63,6 +67,7 @@ int8_t extra_octaves = 0;
 
 // System selection state variables
 uint8_t current_system = 0; // 0-5 for 6 different systems
+bool LOWER_OCTAVE_MODE = false;
 
 bool chord_button_held = false;
 bool sus2_button_held = false;
@@ -89,6 +94,8 @@ enum custom_keycodes {
     KEY_CENTER_DOWN,
     OCTAVE_UP,
     OCTAVE_DOWN,
+    RANDOM_CC_0,
+    RANDOM_CC_1
 	
 };
 
@@ -290,12 +297,11 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 								OCTAVE_UP, TOGGLE_9, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3,
 								OCTAVE_DOWN, TOGGLE_10, MI_G4, MI_Fs4, MI_F4, MI_E4, MI_Ds4, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3),
 								
-        [1] = LAYOUT_ortho_5x15(
-			KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, 
-		KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, 
-		 KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, RGB_MOD,
-		  KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS
-		  , QK_BOOT, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS)
+        [1] = LAYOUT_ortho_5x15(RISKY_CHORDS_ENABLE, RANDOM_CC_0, RANDOM_CC_1, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2, MI_Ds2, MI_D2, MI_Cs2, MI_C2, MI_B1,
+								MI_C1, MI_Cs1, MI_D1, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2, MI_Gs2, MI_G2, MI_Fs2, MI_F2, MI_E2,
+								MI_Ds1, MI_E1, MI_F1, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3, MI_Cs3, MI_C3, MI_B2, MI_As2, MI_A2,
+								MI_Fs1, MI_G1, MI_Gs1, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3, MI_Fs3, MI_F3, MI_E3, MI_Ds3, MI_D3,
+								MI_A2, MI_As1, MI_B2, MI_Fs4, MI_F4, MI_E4, MI_Ds4, MI_D4, MI_Cs4, MI_C4, MI_B3, MI_As3, MI_A3, MI_Gs3, MI_G3)
 };
 
 // [system_index][safe_or_risky][chord_index][next_chord_slots]
@@ -510,7 +516,7 @@ uint8_t nextChords[6][2][37][8] = {
             {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
         }
     },
-    { // System 5 (New empty system)
+    { // System 5 (all chords)
         { // Safe chords [5][0]
              // Safe chords [3][0]
             {}, // 0
@@ -676,6 +682,19 @@ void update_next_chords(void) {
     bool show_all_risky = false;
 
     // current_system is now directly managed by up/down controls
+    
+    // Handle system 4 special case
+    if (current_system == 4) {
+        if (!LOWER_OCTAVE_MODE) {
+            LOWER_OCTAVE_MODE = true;
+            layer_on(1);  // Switch to layer 1
+        }
+    } else {
+        if (LOWER_OCTAVE_MODE) {
+            LOWER_OCTAVE_MODE = false;
+            layer_off(1);  // Switch back to layer 0
+        }
+    }
 
     if (risky_chord_played) {
         next_chords = &nextChords[current_system][1][0];
@@ -743,72 +762,131 @@ void update_next_chord_leds(void) {
     uint8_t chord_color = (risky_mode || risky_chord_played) ? COLOR_CHORD_RISKY : COLOR_CHORD_SAFE;
     rgb_matrix_set_color_all(0, 0, 0);
     
-    // Set LEDs based on chord_grid and scale
-    for (int y = 0; y < MATRIX_ROWS; y++) {
-        for (int x = 2; x < MATRIX_COLS; x++) {
-            uint8_t adjusted_note = relativeNotes[y][x];
-            uint8_t chord_index = chord_grid[y][x];
-            bool note_handled = false;
-
-            // First priority: Chord roots
-            if (chord_index != 0) {
-                set_xy_led(x, y, chord_color);
-                note_handled = true;
-            }
-
-            // Second priority: Key center
-            if (adjusted_note == 0) {
-                if (chord_index != 0) {
-                    set_xy_led(x, y, COLOR_KEY_CENTER_VALID);
-                } else {
-                    set_xy_led(x, y, COLOR_KEY_CENTER);
+    if (LOWER_OCTAVE_MODE) {
+        // Special handling for LOWER_OCTAVE_MODE
+        // Turn off top row (y=0)
+        for (int x = 0; x < MATRIX_COLS; x++) {
+            rgb_matrix_set_color(g_led_config.matrix_co[0][x], 0, 0, 0);
+        }
+        
+        // Handle first 3 columns (x=0,1,2) for rows 1-4
+        for (int y = 1; y < MATRIX_ROWS; y++) {
+            for (int x = 0; x < 3; x++) {
+                uint16_t keycode = pgm_read_word(&keymaps[1][y][x]);  // Use layer 1
+                if (keycode >= MI_C1 && keycode <= MI_G4) {
+                    // Calculate note value
+                    int8_t note_value = (keycode - MI_C1) % 12;
+                    // Sharp notes: 1,3,6,8,10 (C#,D#,F#,G#,A#) - turn off
+                    // Natural notes: 0,2,4,5,7,9,11 (C,D,E,F,G,A,B) - gray
+                    if (note_value == 1 || note_value == 3 || note_value == 6 || 
+                        note_value == 8 || note_value == 10) {
+                        // Sharp notes - turn off
+                        rgb_matrix_set_color(g_led_config.matrix_co[y][x], 0, 0, 0);
+                    } else {
+                        // Natural notes - gray (128, 128, 128)
+                        rgb_matrix_set_color(g_led_config.matrix_co[y][x], 128, 128, 128);
+                    }
                 }
-                note_handled = true;
-            }
-
-            // Third priority: Scale notes that aren't already highlighted
-            if (!note_handled && is_in_scale(adjusted_note)) {
-                set_xy_led(x, y, COLOR_IN_SCALE);
             }
         }
-    }
+        
+        // Handle remaining columns (x=3+) normally
+        for (int y = 0; y < MATRIX_ROWS; y++) {
+            for (int x = 3; x < MATRIX_COLS; x++) {
+                uint8_t adjusted_note = relativeNotes[y][x];
+                uint8_t chord_index = chord_grid[y][x];
+                bool note_handled = false;
 
-    // Rest of the toggle and octave LED updates remain the same
-    set_xy_led(0, 0, toggle_states[0] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+                // First priority: Chord roots
+                if (chord_index != 0) {
+                    set_xy_led(x, y, chord_color);
+                    note_handled = true;
+                }
 
-    // Set octave and extra octaves colors
-    int8_t colorIndex = octave - 3;
-    int8_t extraOctaveIndex = extra_octaves;
-    uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) - 1;
-    uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) - 1;
+                // Second priority: Key center
+                if (adjusted_note == 0) {
+                    if (chord_index != 0) {
+                        set_xy_led(x, y, COLOR_KEY_CENTER_VALID);
+                    } else {
+                        set_xy_led(x, y, COLOR_KEY_CENTER);
+                    }
+                    note_handled = true;
+                }
 
-    if (risky_mode) {
-        // Display extra octaves when risky mode is active
-        if (extra_octaves < 0) {
-            set_xy_led(0, 4, extraOctColor);
-        } else if (extra_octaves > 0) {
-            set_xy_led(0, 3, extraOctColor);
+                // Third priority: Scale notes that aren't already highlighted
+                if (!note_handled && is_in_scale(adjusted_note)) {
+                    set_xy_led(x, y, COLOR_IN_SCALE);
+                }
+            }
         }
-        // Display current system color on SUS2 and SUS4 buttons in risky mode
-        uint8_t system_color = COLOR_SYSTEM_COLOR_0 + current_system;
-        set_xy_led(0, 1, system_color);  // SUS2 button shows current system
-        set_xy_led(0, 2, system_color);  // SUS4 button shows current system
     } else {
-        // Display normal octave when risky mode is not active
-        if (colorIndex < 0) {
-            set_xy_led(0, 4, octColor);
-        } else if (colorIndex > 0) {
-            set_xy_led(0, 3, octColor);
-        }
-    }
+        // Normal mode - existing logic
+        for (int y = 0; y < MATRIX_ROWS; y++) {
+            for (int x = 2; x < MATRIX_COLS; x++) {
+                uint8_t adjusted_note = relativeNotes[y][x];
+                uint8_t chord_index = chord_grid[y][x];
+                bool note_handled = false;
 
-    set_xy_led(1, 0, toggle_states[5] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(1, 1, toggle_states[6] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(1, 2, toggle_states[7] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(1, 3, toggle_states[8] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-    set_xy_led(1, 4, toggle_states[9] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+                // First priority: Chord roots
+                if (chord_index != 0) {
+                    set_xy_led(x, y, chord_color);
+                    note_handled = true;
+                }
+
+                // Second priority: Key center
+                if (adjusted_note == 0) {
+                    if (chord_index != 0) {
+                        set_xy_led(x, y, COLOR_KEY_CENTER_VALID);
+                    } else {
+                        set_xy_led(x, y, COLOR_KEY_CENTER);
+                    }
+                    note_handled = true;
+                }
+
+                // Third priority: Scale notes that aren't already highlighted
+                if (!note_handled && is_in_scale(adjusted_note)) {
+                    set_xy_led(x, y, COLOR_IN_SCALE);
+                }
+            }
+        }
+
+        // Normal toggle and octave LEDs
+        set_xy_led(0, 0, toggle_states[0] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+
+        // Set octave and extra octaves colors
+        int8_t colorIndex = octave - 3;
+        int8_t extraOctaveIndex = extra_octaves;
+        uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) - 1;
+        uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) - 1;
+
+        if (risky_mode) {
+            // Display extra octaves when risky mode is active
+            if (extra_octaves < 0) {
+                set_xy_led(0, 4, extraOctColor);
+            } else if (extra_octaves > 0) {
+                set_xy_led(0, 3, extraOctColor);
+            }
+            // Display current system color on SUS2 and SUS4 buttons in risky mode
+            uint8_t system_color = COLOR_SYSTEM_COLOR_0 + current_system;
+            set_xy_led(0, 1, system_color);  // SUS2 button shows current system
+            set_xy_led(0, 2, system_color);  // SUS4 button shows current system
+        } else {
+            // Display normal octave when risky mode is not active
+            if (colorIndex < 0) {
+                set_xy_led(0, 4, octColor);
+            } else if (colorIndex > 0) {
+                set_xy_led(0, 3, octColor);
+            }
+        }
+
+        set_xy_led(1, 0, toggle_states[5] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(1, 1, toggle_states[6] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(1, 2, toggle_states[7] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(1, 3, toggle_states[8] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        set_xy_led(1, 4, toggle_states[9] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+    }
 }
 
 void setKeyLEDs(int8_t keySignature) {
@@ -922,7 +1000,13 @@ void calculate_chord_state(uint16_t keycode, uint8_t row, uint8_t col, struct Ch
     
     uint8_t chord_type = chord_grid[row][col];
     uint8_t base_note = keycode - MI_Cs3 + 60;
-    int16_t transposed_base = base_note + ((octave - 3) * 12);
+    
+    // Apply octave transpose, but skip for first 3 columns (0,1,2) in LOWER_OCTAVE_MODE
+    int16_t octave_transpose = 0;
+    if (!LOWER_OCTAVE_MODE || col > 2) {
+        octave_transpose = (octave - 3) * 12;
+    }
+    int16_t transposed_base = base_note + octave_transpose;
     
     if (transposed_base < 0) transposed_base = 0;
     if (transposed_base > 127) transposed_base = 127;
@@ -1246,6 +1330,28 @@ case SUS4_ENABLE:
                     midi_config.transpose = (octave - 3) * 12;
                 }
                 update_next_chord_leds();
+            }
+            return false;
+        case RANDOM_CC_0:
+            {
+                uint8_t random_value = rand() & 0x7F;  // 0-127
+                uint8_t cc_offset = risky_mode ? 4 : 0;
+                if (record->event.pressed) {
+                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_DOWN + cc_offset, random_value);
+                } else {
+                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_UP + cc_offset, random_value);
+                }
+            }
+            return false;
+        case RANDOM_CC_1:
+            {
+                uint8_t random_value = rand() & 0x7F;  // 0-127
+                uint8_t cc_offset = risky_mode ? 4 : 0;
+                if (record->event.pressed) {
+                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_1_DOWN + cc_offset, random_value);
+                } else {
+                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_1_UP + cc_offset, random_value);
+                }
             }
             return false;
         default:
