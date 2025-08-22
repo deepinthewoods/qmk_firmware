@@ -62,9 +62,7 @@ bool sus4_active = false;
 int8_t extra_octaves = 0;
 
 // System selection state variables
-uint8_t current_system = 0; // Will be determined by toggle states
-bool sys_toggle_1 = false;
-bool sys_toggle_2 = false;
+uint8_t current_system = 0; // 0-5 for 6 different systems
 
 bool chord_button_held = false;
 bool sus2_button_held = false;
@@ -301,7 +299,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 };
 
 // [system_index][safe_or_risky][chord_index][next_chord_slots]
-uint8_t nextChords[4][2][37][8] = {
+uint8_t nextChords[6][2][37][8] = {
     { // System 0 (Original system)
         { // Safe chords [0][0]
             {}, // 0
@@ -501,6 +499,60 @@ uint8_t nextChords[4][2][37][8] = {
             {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
             {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
         }
+    },
+    { // System 4 (New empty system)
+        { // Safe chords [4][0]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        },
+        { // Risky chords [4][1]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        }
+    },
+    { // System 5 (New empty system)
+        { // Safe chords [5][0]
+             // Safe chords [3][0]
+            {}, // 0
+            {1, 2, 3, 4, 5, 6, 7}, // 1
+ {1, 2, 3, 4, 5, 6, 7}, // 2
+
+ {1, 2, 3, 4, 5, 6, 7}, // 3
+ {1, 2, 3, 4, 5, 6, 7}, // 4
+ {1, 2, 3, 4, 5, 6, 7}, // 5
+ {1, 2, 3, 4, 5, 6, 7}, // 6
+              {1, 2, 3, 4, 5, 6, 7}, // 1// 7
+            {}, // 8 (IIIm7b5)
+            {}, // 9 (#Idim7)
+            {}, // 10 (VI)
+            {}, // 11 (#IVm7b5)
+            {}, // 12 (VII)
+            {}, // 13 (#IIdim7)
+            {}, // 14 (Vm)
+            {}, // 15 (I)
+            {}, // 16
+            {}, // 17 (Im6)
+            {}, // 18 (vo2)
+            {}, // 19 (II)
+            {}, // 20 (bVI)
+            {}, // 21 (bVII)
+            {}, // 22 (VIm7b5ob3)
+            {}, // 23 (#Vdim7)
+            {}, // 24 (III)
+            {}, // 25 (VIIm7b5)
+            {}, // 26
+            {}, // 27 (Idimob3)
+            {}, // 28 (bVI7)
+            {}, // 29 (bVII9)
+            {}, // 30
+            {}, // 31 (Io5)
+            {1}, // 32 (IVm7)
+            {1}  // 33 (bII7)
+        },
+        { // Risky chords [5][1]
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 
+            {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+        }
     }
 };
 
@@ -532,6 +584,13 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 #define OCTAVE_COLOR_4 {0, 255, 255}  // Bright Cyan
 #define OCTAVE_COLOR_5 {0, 0, 255}    // Bright Blue
 
+#define SYSTEM_COLOR_0 {255, 0, 0}    // Bright Red (same as OCTAVE_COLOR_0)
+#define SYSTEM_COLOR_1 {255, 100, 0}  // Orange (same as OCTAVE_COLOR_1)  
+#define SYSTEM_COLOR_2 {255, 255, 0}  // Yellow (same as OCTAVE_COLOR_2)
+#define SYSTEM_COLOR_3 {0, 255, 0}    // Green (same as OCTAVE_COLOR_3)
+#define SYSTEM_COLOR_4 {0, 255, 255}  // Cyan (same as OCTAVE_COLOR_4)
+#define SYSTEM_COLOR_5 {0, 0, 255}    // Blue (same as OCTAVE_COLOR_5)
+
 // Enum for color indices
 enum led_colors {
     COLOR_IN_SCALE,
@@ -550,6 +609,12 @@ enum led_colors {
     COLOR_OCTAVE_COLOR_3,
     COLOR_OCTAVE_COLOR_4,
     COLOR_OCTAVE_COLOR_5,
+    COLOR_SYSTEM_COLOR_0,
+    COLOR_SYSTEM_COLOR_1,
+    COLOR_SYSTEM_COLOR_2,
+    COLOR_SYSTEM_COLOR_3,
+    COLOR_SYSTEM_COLOR_4,
+    COLOR_SYSTEM_COLOR_5,
     // Add more colors as needed
     NUM_LED_COLORS // This will automatically be the count of colors
 };
@@ -572,6 +637,12 @@ const uint8_t PROGMEM LED_COLORS[][3] = {
     OCTAVE_COLOR_3 ,
     OCTAVE_COLOR_4 ,
     OCTAVE_COLOR_5 ,
+    SYSTEM_COLOR_0 ,
+    SYSTEM_COLOR_1 ,
+    SYSTEM_COLOR_2 ,
+    SYSTEM_COLOR_3 ,
+    SYSTEM_COLOR_4 ,
+    SYSTEM_COLOR_5 ,
    
 };
 
@@ -604,8 +675,7 @@ void update_next_chords(void) {
     uint8_t num_next_chords;
     bool show_all_risky = false;
 
-    // Calculate current_system from toggle states
-    current_system = (sys_toggle_1 ? 1 : 0) | (sys_toggle_2 ? 2 : 0);
+    // current_system is now directly managed by up/down controls
 
     if (risky_chord_played) {
         next_chords = &nextChords[current_system][1][0];
@@ -721,8 +791,10 @@ void update_next_chord_leds(void) {
         } else if (extra_octaves > 0) {
             set_xy_led(0, 3, extraOctColor);
         }
-        set_xy_led(0, 1, sys_toggle_1 ? COLOR_KEY_CENTER_VALID : COLOR_KEY_CENTER);
-        set_xy_led(0, 2, sys_toggle_2 ? COLOR_KEY_CENTER_VALID : COLOR_KEY_CENTER);
+        // Display current system color on SUS2 and SUS4 buttons in risky mode
+        uint8_t system_color = COLOR_SYSTEM_COLOR_0 + current_system;
+        set_xy_led(0, 1, system_color);  // SUS2 button shows current system
+        set_xy_led(0, 2, system_color);  // SUS4 button shows current system
     } else {
         // Display normal octave when risky mode is not active
         if (colorIndex < 0) {
@@ -1046,7 +1118,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         case SUS2_ENABLE:
     if (record->event.pressed) {
         if (risky_mode) {
-            sys_toggle_1 = !sys_toggle_1;
+            // System down (decrease current_system)
+            current_system = (current_system == 0) ? 5 : current_system - 1;
             update_next_chords();
             update_next_chord_leds();
         } else {
@@ -1095,7 +1168,8 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 case SUS4_ENABLE:
     if (record->event.pressed) {
         if (risky_mode) {
-            sys_toggle_2 = !sys_toggle_2;
+            // System up (increase current_system)  
+            current_system = (current_system == 5) ? 0 : current_system + 1;
             update_next_chords();
             update_next_chord_leds();
         } else {
