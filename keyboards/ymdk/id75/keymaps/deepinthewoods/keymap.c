@@ -850,42 +850,64 @@ void update_next_chord_leds(void) {
             }
         }
 
-        // Normal toggle and octave LEDs
-        set_xy_led(0, 0, toggle_states[0] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-
-        // Set octave and extra octaves colors
-        int8_t colorIndex = octave - 3;
-        int8_t extraOctaveIndex = extra_octaves;
-        uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) - 1;
-        uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) - 1;
-
-        if (risky_mode) {
-            // Display extra octaves when risky mode is active
-            if (extra_octaves < 0) {
-                set_xy_led(0, 4, extraOctColor);
-            } else if (extra_octaves > 0) {
-                set_xy_led(0, 3, extraOctColor);
+        // Special case: When risky key is held in layout 1, turn off control LEDs and third column
+        if (risky_mode && LOWER_OCTAVE_MODE) {
+            // Turn off third column (x=2)
+            for (int y = 0; y < MATRIX_ROWS; y++) {
+                rgb_matrix_set_color(g_led_config.matrix_co[y][2], 0, 0, 0);
             }
-            // Display current system color on SUS2 and SUS4 buttons in risky mode
+            
+            // Show current system on RANDOM_CC_0 and MI_Cs1 positions (0,1) and (1,1)
             uint8_t system_color = COLOR_SYSTEM_COLOR_0 + current_system;
-            set_xy_led(0, 1, system_color);  // SUS2 button shows current system
-            set_xy_led(0, 2, system_color);  // SUS4 button shows current system
+            set_xy_led(1, 0, system_color);  // RANDOM_CC_0 position
+            set_xy_led(1, 1, system_color);  // MI_Cs1 position
+            
+            // Turn off other control LEDs
+            set_xy_led(0, 1, 0); // SUS2_ENABLE off
+            set_xy_led(0, 2, 0); // SUS4_ENABLE off  
+            set_xy_led(0, 3, 0); // OCTAVE_UP off
+            set_xy_led(0, 4, 0); // OCTAVE_DOWN off
+            set_xy_led(1, 2, 0); // TOGGLE_8 off
+            set_xy_led(1, 3, 0); // TOGGLE_9 off
+            set_xy_led(1, 4, 0); // TOGGLE_10 off
         } else {
-            // Display normal octave when risky mode is not active
-            if (colorIndex < 0) {
-                set_xy_led(0, 4, octColor);
-            } else if (colorIndex > 0) {
-                set_xy_led(0, 3, octColor);
-            }
-        }
+            // Normal toggle and octave LEDs
+            set_xy_led(0, 0, toggle_states[0] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(0, 1, toggle_states[1] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(0, 2, toggle_states[2] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
 
-        set_xy_led(1, 0, toggle_states[5] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(1, 1, toggle_states[6] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(1, 2, toggle_states[7] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(1, 3, toggle_states[8] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
-        set_xy_led(1, 4, toggle_states[9] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            // Set octave and extra octaves colors
+            int8_t colorIndex = octave - 3;
+            int8_t extraOctaveIndex = extra_octaves;
+            uint8_t octColor = COLOR_OCTAVE_COLOR_0 + abs(colorIndex) - 1;
+            uint8_t extraOctColor = COLOR_OCTAVE_COLOR_0 + abs(extraOctaveIndex) - 1;
+
+            if (risky_mode) {
+                // Display extra octaves when risky mode is active
+                if (extra_octaves < 0) {
+                    set_xy_led(0, 4, extraOctColor);
+                } else if (extra_octaves > 0) {
+                    set_xy_led(0, 3, extraOctColor);
+                }
+                // Display current system color on SUS2 and SUS4 buttons in risky mode
+                uint8_t system_color = COLOR_SYSTEM_COLOR_0 + current_system;
+                set_xy_led(0, 1, system_color);  // SUS2 button shows current system
+                set_xy_led(0, 2, system_color);  // SUS4 button shows current system
+            } else {
+                // Display normal octave when risky mode is not active
+                if (colorIndex < 0) {
+                    set_xy_led(0, 4, octColor);
+                } else if (colorIndex > 0) {
+                    set_xy_led(0, 3, octColor);
+                }
+            }
+
+            set_xy_led(1, 0, toggle_states[5] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(1, 1, toggle_states[6] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(1, 2, toggle_states[7] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(1, 3, toggle_states[8] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+            set_xy_led(1, 4, toggle_states[9] ? COLOR_TOGGLE_ON : COLOR_TOGGLE_OFF);
+        }
     }
 }
 
@@ -1334,15 +1356,36 @@ case SUS4_ENABLE:
             return false;
         case RANDOM_CC_0:
             {
-                uint8_t random_value = rand() & 0x7F;  // 0-127
-                uint8_t cc_offset = risky_mode ? 4 : 0;
-                if (record->event.pressed) {
-                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_DOWN + cc_offset, random_value);
+                if (record->event.pressed && risky_mode && LOWER_OCTAVE_MODE) {
+                    // System up when risky key held in layout 1
+                    if (current_system < 5) {
+                        current_system++;
+                    }
+                    update_next_chords();
+                    update_next_chord_leds();
                 } else {
-                    midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_UP + cc_offset, random_value);
+                    uint8_t random_value = rand() & 0x7F;  // 0-127
+                    uint8_t cc_offset = risky_mode ? 4 : 0;
+                    if (record->event.pressed) {
+                        midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_DOWN + cc_offset, random_value);
+                    } else {
+                        midi_send_cc(&midi_device, 0, MIDI_CC_RANDOM_0_UP + cc_offset, random_value);
+                    }
                 }
             }
             return false;
+        case MI_Cs1:
+            if (record->event.pressed && risky_mode && LOWER_OCTAVE_MODE) {
+                // System down when risky key held in layout 1
+                if (current_system > 0) {
+                    current_system--;
+                }
+                update_next_chords();
+                update_next_chord_leds();
+                return false;
+            }
+            // Fall through to normal MIDI processing
+            return true;
         case RANDOM_CC_1:
             {
                 uint8_t random_value = rand() & 0x7F;  // 0-127
