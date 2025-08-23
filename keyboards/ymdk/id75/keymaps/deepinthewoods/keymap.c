@@ -62,6 +62,9 @@ bool initted = false;
 bool sus2_active = false;
 bool sus4_active = false;
 
+// Feature toggle: Allow playing any diatonic chord even if not in current progression system
+bool ENABLE_FREE_DIATONIC_CHORDS = true;
+
 
 int8_t extra_octaves = 0;
 
@@ -665,6 +668,16 @@ bool is_in_scale(uint8_t adjusted_note) {
     return false;
 }
 
+// Map diatonic scale degrees to basic chord indices (I-VII = 1-7)
+uint8_t get_diatonic_chord_index(uint8_t adjusted_note) {
+    for (uint8_t i = 0; i < 7; i++) {
+        if (adjusted_note == major_scale[i]) {
+            return i + 1;  // Return chord indices 1-7 for scale degrees I-VII
+        }
+    }
+    return 0;  // Not a diatonic root
+}
+
 void set_xy_led(uint8_t x, uint8_t y, uint8_t color_index) {
     uint8_t led_index = g_led_config.matrix_co[y][x];
     
@@ -1021,6 +1034,12 @@ void calculate_chord_state(uint16_t keycode, uint8_t row, uint8_t col, struct Ch
     new_state->note_count = 0;
     
     uint8_t chord_type = chord_grid[row][col];
+    
+    // Check for free diatonic chords if main chord grid is empty
+    if (chord_type == 0 && ENABLE_FREE_DIATONIC_CHORDS) {
+        uint8_t adjusted_note = relativeNotes[row][col];
+        chord_type = get_diatonic_chord_index(adjusted_note);
+    }
     uint8_t base_note = keycode - MI_Cs3 + 60;
     
     // Apply octave transpose, but skip for first 3 columns (0,1,2) in LOWER_OCTAVE_MODE
@@ -1160,6 +1179,12 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             uint8_t x = record->event.key.col;
             uint8_t chord_index = chord_grid[y][x];
             
+            // Check for free diatonic chords if main chord grid is empty
+            if (chord_index == 0 && ENABLE_FREE_DIATONIC_CHORDS) {
+                uint8_t adjusted_note = relativeNotes[y][x];
+                chord_index = get_diatonic_chord_index(adjusted_note);
+            }
+            
             if (chord_index != 0) { // If a valid chord index is found or the I chord is played
                 last_chord_index = chord_index;
                 
@@ -1175,6 +1200,10 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
                 }
                 
                 xprintf("Chord played: %d, Risky: %d\n", last_chord_index, risky_chord_played);
+                
+                // Update chord progression system after chord change
+                update_next_chords();
+                update_next_chord_leds();
             }
         }
         
